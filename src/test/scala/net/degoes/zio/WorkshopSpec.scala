@@ -13,30 +13,25 @@ object WorkshopSpec
       suite("Workshop tests")(
         testM("HelloWorld") {
           for {
-            value  <- HelloWorld.run(Nil)
-            output <- TestConsole.output
+            exitCode <- HelloWorld.run(Nil)
+            output   <- TestConsole.output
           } yield
-            assert(value, equalTo(0)) &&
+            assert(exitCode, equalTo(0)) &&
               assert(output, equalTo(Vector("Hello World!\n")))
         },
         testM("ErrorConversion") {
           for {
-            value  <- ErrorConversion.run(Nil)
-            output <- TestConsole.output
+            exitCode <- ErrorConversion.run(Nil)
+            output   <- TestConsole.output
           } yield
-            assert(value, equalTo(1)) &&
+            assert(exitCode, equalTo(1)) &&
               assert(output, equalTo(Vector("About to fail...\n", "Uh oh!\n")))
         },
         testM("PromptName") {
-          val nameGen = Gen
-            .listOf(Gen.alphaNumericChar)
-            .filter(_.nonEmpty)
-            .map(_.mkString)
-          checkM(nameGen) {
+          checkM(Gen.alphaNumericString) {
             name =>
               for {
-                // gotta clear the console before each run or the current lines
-                // carry over to the other runs!
+                // clear TestConsole before each run to keep the test isolated
                 _                  <- TestConsole.clearInput
                 _                  <- TestConsole.clearOutput
                 _                  <- TestConsole.feedLines(name)
