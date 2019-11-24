@@ -1,5 +1,6 @@
 package net.degoes.zio
 
+import zio.ZIO
 import zio.test._
 import zio.test.Assertion._
 import zio.test.environment._
@@ -9,6 +10,7 @@ object WorkshopSpec
     extends DefaultRunnableSpec({
       import TicTacToe._
       import BoardHelpers._
+      import PropertyHelpers._
 
       suite("Workshop tests")(
         testM("HelloWorld") {
@@ -30,18 +32,40 @@ object WorkshopSpec
         testM("PromptName") {
           checkM(Gen.alphaNumericString) {
             name =>
-              for {
-                // clear TestConsole before each run to keep the test isolated
-                _                  <- TestConsole.clearInput
-                _                  <- TestConsole.clearOutput
-                _                  <- TestConsole.feedLines(name)
-                exitCode           <- PromptName.run(Nil)
-                output             <- TestConsole.output
-                (prompt, greeting) = (output(0), output(1))
-              } yield
-                assert(exitCode, equalTo(0)) &&
-                  assert(prompt.toLowerCase, containsString("name")) &&
-                  assert(greeting, equalTo(s"Hello, $name!\n"))
+              clearConsoleBefore {
+                for {
+                  _                  <- TestConsole.feedLines(name)
+                  exitCode           <- PromptName.run(Nil)
+                  output             <- TestConsole.output
+                  (prompt, greeting) = (output(0), output(1))
+                } yield
+                  assert(exitCode, equalTo(0)) &&
+                    assert(prompt.toLowerCase, containsString("name")) &&
+                    assert(greeting, equalTo(s"Hello, $name!\n"))
+              }
+          }
+        },
+        testM("NumberGuesser") {
+          val genNumber = Gen.int(0, 100)
+          val genGuess = for {
+            num   <- genNumber
+            guess <- Gen.oneOf(genNumber, Gen.const(num)) // make correct guesses at least 50% of the time
+          } yield (num, guess)
+          checkM(genGuess) {
+            case (num, guess) =>
+              clearConsoleBefore {
+                for {
+                  _                  <- TestRandom.clearInts
+                  _                  <- TestRandom.feedInts(num)
+                  _                  <- TestConsole.feedLines(guess.toString)
+                  exitCode           <- NumberGuesser.run(Nil)
+                  output             <- TestConsole.output
+                  (prompt, response) = (output(0), output(1))
+                } yield
+                  assert(exitCode, equalTo(0)) &&
+                    assert(prompt, isNonEmptyString) &&
+                    assertResponse(num, guess, response)
+              }
           }
         },
         suite("Board")(
@@ -72,6 +96,21 @@ object WorkshopSpec
         )
       )
     })
+
+object PropertyHelpers {
+  def clearConsoleBefore[R, E](test: ZIO[R, E, TestResult]) =
+    clearConsole *> test
+
+  def clearConsole =
+    TestConsole.clearInput *> TestConsole.clearOutput
+
+  def assertResponse(num: Int, guess: Int, response: String): TestResult =
+    if (num == guess)
+      assert(response, equalTo("You guessed correctly!\n"))
+    else
+      assert(response, containsString(num.toString))
+
+}
 
 object BoardHelpers {
   import TicTacToe._

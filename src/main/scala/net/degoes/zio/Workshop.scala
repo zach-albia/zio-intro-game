@@ -89,10 +89,11 @@ object NumberGuesser extends App {
     */
   def run(args: List[String]): ZIO[ZEnv, Nothing, Int] = {
     (for {
+      _       <- putStr("Please enter an integer from 0 to 100: ")
       randInt <- nextInt(100)
-      _       <- putStrLn("Please enter an integer from 0 to 100")
       guess   <- getStrLn
-    } yield analyzeAnswer(randInt, guess)) as 0 orElse ZIO.succeed(1)
+      _       <- analyzeAnswer(randInt, guess)
+    } yield 0) orElse ZIO.succeed(1)
   }
 }
 
