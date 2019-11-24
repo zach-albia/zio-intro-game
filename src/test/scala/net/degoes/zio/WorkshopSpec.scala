@@ -1,9 +1,8 @@
 package net.degoes.zio
 
-import zio.{ZIO, random}
 import zio.test._
-import zio.test.environment._
 import zio.test.Assertion._
+import zio.test.environment._
 import zio.test.TestAspect.ignore
 
 object WorkshopSpec
@@ -29,24 +28,25 @@ object WorkshopSpec
               assert(output, equalTo(Vector("About to fail...\n", "Uh oh!\n")))
         },
         testM("PromptName") {
-          val nameGen =
-            Gen.listOf(Gen.alphaNumericChar).filter(_.nonEmpty).map(_.mkString)
+          val nameGen = Gen
+            .listOf(Gen.alphaNumericChar)
+            .filter(_.nonEmpty)
+            .map(_.mkString)
           checkM(nameGen) {
             name =>
               for {
-                res <- TestEnvironment.Value.reserve
-                env <- res.acquire
-                foo <- (for {
-                        _                  <- TestConsole.feedLines(name)
-                        value              <- PromptName.run(Nil)
-                        output             <- TestConsole.output
-                        (prompt, greeting) = (output(0), output(1))
-                      } yield
-                        assert(value, equalTo(0)) &&
-                          assert(prompt, containsString("name")) &&
-                          assert(greeting, equalTo(s"Hello, $name!\n")))
-                        .provide(env)
-              } yield foo
+                // gotta clear the console before each run or the current lines
+                // carry over to the other runs!
+                _                  <- TestConsole.clearInput
+                _                  <- TestConsole.clearOutput
+                _                  <- TestConsole.feedLines(name)
+                exitCode           <- PromptName.run(Nil)
+                output             <- TestConsole.output
+                (prompt, greeting) = (output(0), output(1))
+              } yield
+                assert(exitCode, equalTo(0)) &&
+                  assert(prompt.toLowerCase, containsString("name")) &&
+                  assert(greeting, equalTo(s"Hello, $name!\n"))
           }
         },
         suite("Board")(
