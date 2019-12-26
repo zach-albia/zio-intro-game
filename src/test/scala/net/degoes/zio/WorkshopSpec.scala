@@ -28,7 +28,7 @@ object WorkshopSpec
             assert(exitCode, equalTo(1)) &&
               assert(output, equalTo(Vector("About to fail...\n", "Uh oh!\n")))
         },
-        testM("PromptName") {
+        testM("PromptName greets with name") {
           checkM(Gen.alphaNumericString) {
             name =>
               clearConsole *>
