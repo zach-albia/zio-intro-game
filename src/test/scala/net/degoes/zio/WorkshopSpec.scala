@@ -4,7 +4,6 @@ import zio.ZIO
 import zio.test._
 import zio.test.Assertion._
 import zio.test.environment._
-import zio.test.TestAspect.ignore
 
 object WorkshopSpec
     extends DefaultRunnableSpec({
@@ -32,42 +31,56 @@ object WorkshopSpec
         testM("PromptName") {
           checkM(Gen.alphaNumericString) {
             name =>
-              clearConsoleBefore {
-                for {
+              clearConsole *>
+                (for {
                   _                  <- TestConsole.feedLines(name)
                   exitCode           <- PromptName.run(Nil)
                   output             <- TestConsole.output
                   (prompt, greeting) = (output(0), output(1))
                 } yield
                   assert(exitCode, equalTo(0)) &&
-                    assert(prompt.toLowerCase, containsString("name")) &&
-                    assert(greeting, equalTo(s"Hello, $name!\n"))
-              }
+                    assert(prompt.toLowerCase, isNonEmptyString) &&
+                    assert(output.size, equalTo(2)) &&
+                    assert(greeting, equalTo(s"Hello, $name!\n")))
           }
         },
-        testM("NumberGuesser") {
-          val genNumber = Gen.int(0, 100)
-          val genGuess = for {
-            num   <- genNumber
-            guess <- Gen.oneOf(genNumber, Gen.const(num)) // make correct guesses at least 50% of the time
-          } yield (num, guess)
-          checkM(genGuess) {
-            case (num, guess) =>
-              clearConsoleBefore {
-                for {
-                  _                  <- TestRandom.clearInts
-                  _                  <- TestRandom.feedInts(num)
-                  _                  <- TestConsole.feedLines(guess.toString)
-                  exitCode           <- NumberGuesser.run(Nil)
-                  output             <- TestConsole.output
-                  (prompt, response) = (output(0), output(1))
+        suite("NumberGuesser")(
+          testM("correct guess prints congratulatory message") {
+            checkM(Gen.int(0, 100)) {
+              num =>
+                clearConsole *> clearRandom *>
+                  (for {
+                    _        <- TestRandom.feedInts(num)
+                    _        <- TestConsole.feedLines(num.toString)
+                    exitCode <- NumberGuesser.run(Nil)
+                    output   <- TestConsole.output
+                    response = output(1)
+                  } yield
+                    assert(exitCode, equalTo(0)) &&
+                      assert(output.size, equalTo(2)) &&
+                      assert(response, equalTo("You guessed correctly!\n")))
+            }
+          },
+          testM("incorrect guess reveals number") {
+            val genNumber = Gen.anyInt
+            val genNumAndGuess = for {
+              num   <- genNumber
+              guess <- genNumber if guess != num
+            } yield (num, guess)
+            checkM(genNumAndGuess) {
+              case (num, guess) =>
+                clearConsole *> clearRandom *> (for {
+                  _        <- TestRandom.feedInts(num)
+                  _        <- TestConsole.feedLines(guess.toString)
+                  exitCode <- NumberGuesser.run(Nil)
+                  output   <- TestConsole.output
+                  tokens   = output(1).split(" ").map(_.strip).toList
                 } yield
                   assert(exitCode, equalTo(0)) &&
-                    assert(prompt, isNonEmptyString) &&
-                    assertResponse(num, guess, response)
-              }
+                    assert(tokens, exists(startsWith(num.toString))))
+            }
           }
-        },
+        ),
         suite("Board")(
           test("won horizontal first") {
             horizontalFirst(Mark.X) && horizontalFirst(Mark.O)
@@ -98,18 +111,14 @@ object WorkshopSpec
     })
 
 object PropertyHelpers {
-  def clearConsoleBefore[R, E](test: ZIO[R, E, TestResult]) =
-    clearConsole *> test
-
-  def clearConsole =
+  def clearConsole: ZIO[TestConsole, Nothing, Unit] =
     TestConsole.clearInput *> TestConsole.clearOutput
 
-  def assertResponse(num: Int, guess: Int, response: String): TestResult =
-    if (num == guess)
-      assert(response, equalTo("You guessed correctly!\n"))
-    else
-      assert(response, containsString(num.toString))
-
+  def clearRandom: ZIO[TestRandom, Nothing, Unit] =
+    TestRandom.clearInts *> TestRandom.clearBooleans *>
+      TestRandom.clearBytes *> TestRandom.clearChars *>
+      TestRandom.clearDoubles *> TestRandom.clearFloats *>
+      TestRandom.clearLongs *> TestRandom.clearStrings
 }
 
 object BoardHelpers {
