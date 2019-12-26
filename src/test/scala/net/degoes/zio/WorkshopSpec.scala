@@ -1,6 +1,6 @@
 package net.degoes.zio
 
-import zio.{ZIO, ZManaged}
+import zio.ZIO
 import zio.blocking.Blocking
 import zio.clock.Clock
 import zio.console.Console
@@ -88,7 +88,7 @@ object WorkshopSpec
           }
         ),
         suite("AlarmApp")(
-          testM("Retries until good input given") {
+          testM("Retries until good input given then wakes up") {
             val tries = for {
               badInputs <- Gen.listOf(Gen.alphaNumericString.filter(_.forall(!_.isDigit)))
               goodInput <- Gen.int(1, Int.MaxValue).map(_.toString)
@@ -101,10 +101,33 @@ object WorkshopSpec
                   exitCode <- AlarmApp.run(Nil)
                   output   <- TestConsole.output
                 } yield
-                  // program always succeeds because of retry logic
-                  assert(exitCode, equalTo(0)) &&
-                    // lines printed to console = prompts + wake message
-                    assert(output.size, equalTo(tries.size + 1)))
+                // program always succeeds because of retry logic
+                assert(exitCode, equalTo(0)) &&
+                  // lines printed to console = prompts + wake message
+                  assert(output.size, equalTo(tries.size + 1)) &&
+                  assert(output.last.strip, equalTo("Wake up!")))
+                  .provideSomeManaged(newTestClock)
+            }
+          },
+          testM("Never wakes up before alarm goes off") {
+            val times = for {
+              sleepTime   <- Gen.int(2, Int.MaxValue)
+              beforeAlarm <- Gen.int(1, sleepTime - 1)
+            } yield (sleepTime, beforeAlarm)
+            checkM(times) {
+              case (sleepTime, beforeAlarm) =>
+                clearConsole *> (for {
+                  _      <- TestConsole.feedLines(sleepTime.toString)
+                  _      <- TestClock.adjust(beforeAlarm.seconds)
+                  fiber  <- AlarmApp.run(Nil).fork
+                  _      <- TestClock.adjust(0.seconds) // RACE CONDITIONNNNNN
+                  exit   <- fiber.interrupt // To fix RACE CONDITION, we have to wait for clock to sleep before we kill the fiber
+                  output <- TestConsole.output
+                } yield
+                // assert alarm has not gone off
+                assert(exit, isInterrupted) &&
+                  // only prompt message was written to console
+                  assert(output.size, equalTo(1)))
                   .provideSomeManaged(newTestClock)
             }
           }
@@ -148,8 +171,7 @@ object PropertyHelpers {
       TestRandom.clearDoubles *> TestRandom.clearFloats *>
       TestRandom.clearLongs *> TestRandom.clearStrings
 
-  def newTestClock
-    : ZManaged[zio.ZEnv with TestConsole, Nothing, zio.ZEnv with TestConsole with TestClock] = {
+  def newTestClock = {
     for {
       env     <- ZIO.environment[zio.ZEnv with TestConsole].toManaged_
       clock   <- TestClock.make(TestClock.DefaultData)
@@ -157,8 +179,7 @@ object PropertyHelpers {
     } yield testEnv
   }
 
-  def useNewClock(env: zio.ZEnv with TestConsole,
-                  testClock: TestClock): zio.ZEnv with TestConsole with TestClock = {
+  def useNewClock(env: zio.ZEnv with TestConsole, testClock: TestClock) = {
     new TestConsole with TestClock with Clock with Console with System with Random with Blocking {
       override val console: TestConsole.Service[Any] = env.console
       override val blocking: Blocking.Service[Any]   = env.blocking
