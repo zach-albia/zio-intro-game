@@ -111,7 +111,7 @@ object WorkshopSpec
           },
           testM("Never wakes up before alarm goes off") {
             val times = for {
-              sleepTime   <- Gen.int(2, Int.MaxValue)
+              sleepTime   <- Gen.int(1, Int.MaxValue)
               beforeAlarm <- Gen.int(1, sleepTime - 1)
             } yield (sleepTime, beforeAlarm)
             checkM(times) {
@@ -120,8 +120,8 @@ object WorkshopSpec
                   _      <- TestConsole.feedLines(sleepTime.toString)
                   _      <- TestClock.adjust(beforeAlarm.seconds)
                   fiber  <- AlarmApp.run(Nil).fork
-                  _      <- TestClock.adjust(0.seconds) // RACE CONDITIONNNNNN
-                  exit   <- fiber.interrupt // To fix RACE CONDITION, we have to wait for clock to sleep before we kill the fiber
+                  _      <- waitForSleep()
+                  exit   <- fiber.interrupt
                   output <- TestConsole.output
                 } yield
                 // assert alarm has not gone off
@@ -189,6 +189,12 @@ object PropertyHelpers {
       override val scheduler: TestClock.Service[Any] = testClock.scheduler
     }
   }
+
+  def waitForSleep(): ZIO[TestClock, Nothing, Unit] =
+    for {
+      sleeps <- TestClock.sleeps
+      _      <- if (sleeps.nonEmpty) ZIO.unit else waitForSleep()
+    } yield ()
 }
 
 object BoardHelpers {
