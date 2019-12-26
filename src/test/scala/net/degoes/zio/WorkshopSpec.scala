@@ -1,15 +1,22 @@
 package net.degoes.zio
 
-import zio.ZIO
-import zio.test._
+import zio.{ZIO, ZManaged}
+import zio.blocking.Blocking
+import zio.clock.Clock
+import zio.console.Console
+import zio.duration._
+import zio.random.Random
+import zio.system.System
 import zio.test.Assertion._
+import zio.test.TestAspect._
+import zio.test._
 import zio.test.environment._
 
 object WorkshopSpec
     extends DefaultRunnableSpec({
-      import TicTacToe._
       import BoardHelpers._
       import PropertyHelpers._
+      import TicTacToe._
 
       suite("Workshop tests")(
         testM("HelloWorld") {
@@ -46,19 +53,18 @@ object WorkshopSpec
         },
         suite("NumberGuesser")(
           testM("correct guess prints congratulatory message") {
-            checkM(Gen.int(0, 100)) {
-              num =>
-                clearConsole *> clearRandom *>
-                  (for {
-                    _        <- TestRandom.feedInts(num)
-                    _        <- TestConsole.feedLines(num.toString)
-                    exitCode <- NumberGuesser.run(Nil)
-                    output   <- TestConsole.output
-                    response = output(1)
-                  } yield
-                    assert(exitCode, equalTo(0)) &&
-                      assert(output.size, equalTo(2)) &&
-                      assert(response, equalTo("You guessed correctly!\n")))
+            checkM(Gen.int(0, 100)) { num =>
+              clearConsole *> clearRandom *>
+                (for {
+                  _        <- TestRandom.feedInts(num)
+                  _        <- TestConsole.feedLines(num.toString)
+                  exitCode <- NumberGuesser.run(Nil)
+                  output   <- TestConsole.output
+                  response = output(1)
+                } yield
+                  assert(exitCode, equalTo(0)) &&
+                    assert(output.size, equalTo(2)) &&
+                    assert(response, equalTo("You guessed correctly!\n")))
             }
           },
           testM("incorrect guess reveals number") {
@@ -81,6 +87,28 @@ object WorkshopSpec
             }
           }
         ),
+        suite("AlarmApp")(
+          testM("Retries until good input given") {
+            val tries = for {
+              badInputs <- Gen.listOf(Gen.alphaNumericString.filter(_.forall(!_.isDigit)))
+              goodInput <- Gen.int(1, Int.MaxValue).map(_.toString)
+            } yield (badInputs.toVector :+ goodInput, goodInput)
+            checkM(tries) {
+              case (tries, goodTry) =>
+                clearConsole *> (for {
+                  _        <- TestConsole.feedLines(tries: _*)
+                  _        <- TestClock.adjust(goodTry.toInt.seconds)
+                  exitCode <- AlarmApp.run(Nil)
+                  output   <- TestConsole.output
+                } yield
+                  // program always succeeds because of retry logic
+                  assert(exitCode, equalTo(0)) &&
+                    // lines printed to console = prompts + wake message
+                    assert(output.size, equalTo(tries.size + 1)))
+                  .provideSomeManaged(newTestClock)
+            }
+          }
+        ) @@ timeout(10.seconds),
         suite("Board")(
           test("won horizontal first") {
             horizontalFirst(Mark.X) && horizontalFirst(Mark.O)
@@ -119,6 +147,27 @@ object PropertyHelpers {
       TestRandom.clearBytes *> TestRandom.clearChars *>
       TestRandom.clearDoubles *> TestRandom.clearFloats *>
       TestRandom.clearLongs *> TestRandom.clearStrings
+
+  def newTestClock
+    : ZManaged[zio.ZEnv with TestConsole, Nothing, zio.ZEnv with TestConsole with TestClock] = {
+    for {
+      env     <- ZIO.environment[zio.ZEnv with TestConsole].toManaged_
+      clock   <- TestClock.make(TestClock.DefaultData)
+      testEnv = useNewClock(env, clock)
+    } yield testEnv
+  }
+
+  def useNewClock(env: zio.ZEnv with TestConsole,
+                  testClock: TestClock): zio.ZEnv with TestConsole with TestClock = {
+    new TestConsole with TestClock with Clock with Console with System with Random with Blocking {
+      override val console: TestConsole.Service[Any] = env.console
+      override val blocking: Blocking.Service[Any]   = env.blocking
+      override val random: Random.Service[Any]       = env.random
+      override val system: System.Service[Any]       = env.system
+      override val clock: TestClock.Service[Any]     = testClock.clock
+      override val scheduler: TestClock.Service[Any] = testClock.scheduler
+    }
+  }
 }
 
 object BoardHelpers {
