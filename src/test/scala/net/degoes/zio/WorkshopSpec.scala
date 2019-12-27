@@ -1,14 +1,17 @@
 package net.degoes.zio
 
+import java.nio.file.Paths
+
 import zio.ZIO
 import zio.blocking.Blocking
 import zio.clock.Clock
 import zio.console.Console
 import zio.duration._
-import zio.nio.file.{Files, Path}
+import zio.nio.file.{FileSystem, Files, Path}
 import zio.random.Random
 import zio.system.System
 import zio.test.Assertion._
+import zio.test.TestAspect._
 import zio.test._
 import zio.test.environment._
 
@@ -145,18 +148,23 @@ object WorkshopSpec
         ),
         suite("Cat") {
           testM("prints string read from file") {
-            val str  = "Lorem ipsum"
-            val temp = "cat.tmp"
-            val path = Path(temp)
-            for {
-              _        <- Files.writeLines(path, List(str))
-              exitCode <- Cat.run(List(temp))
-              output   <- TestConsole.output
-              exists   <- Files.deleteIfExists(path)
-            } yield
-              assert(exitCode, equalTo(0)) &&
-                assert(output(0).strip, equalTo(str)) &&
-                assert(exists, isTrue)
+            val contents = Gen.vectorOf(Gen.string(Gen.printableChar).filter(_.nonEmpty))
+            checkM(contents) {
+              contents =>
+                for {
+                  _        <- clearConsole
+                  tempFile <- Files.createTempFile(".tmp", None, List.empty)
+                  _        <- Files.writeLines(tempFile, contents)
+                  absPath  <- tempFile.toAbsolutePath
+                  exitCode <- Cat.run(List(absPath.toString))
+                  output   <- TestConsole.output
+                  exists   <- Files.deleteIfExists(tempFile)
+                  lines    = output(0).split("\\s+").toVector
+                } yield
+                  assert(exitCode, equalTo(0)) &&
+                    assert(lines, equalTo(contents)) &&
+                    assert(exists, isTrue)
+            }
           }
         },
         suite("Board")(
