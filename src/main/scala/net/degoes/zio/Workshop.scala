@@ -74,7 +74,7 @@ object Looping extends App {
     * Implement a `repeat` combinator using `flatMap` and recursion.
     */
   def repeat[R, E, A](n: Int)(task: ZIO[R, E, A]): ZIO[R, E, A] =
-    ???
+    if (n > 1) task.flatMap(_ => repeat(n - 1)(task)) else task
 
   def run(args: List[String]): ZIO[ZEnv, Nothing, Int] =
     repeat(100)(putStrLn("All work and no play makes Jack a dull boy")) as 0

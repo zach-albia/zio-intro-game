@@ -37,6 +37,12 @@ object WorkshopSpec
             output   <- TestConsole.output
           } yield assert(exitCode, equalTo(1)) && assert(output.size, equalTo(2))
         },
+        testM("Looping") {
+          for {
+            exitCode <- Looping.run(Nil)
+            output   <- TestConsole.output
+          } yield assert(exitCode, equalTo(0)) && assert(output.size, equalTo(100))
+        },
         testM("PromptName greets with name") {
           checkM(Gen.alphaNumericString) {
             name =>
