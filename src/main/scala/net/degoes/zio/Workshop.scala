@@ -88,7 +88,7 @@ object EffectConversion extends App {
     * Using ZIO.effect, convert the side-effecting of `println` into a pure
     * functional effect.
     */
-  def myPrintLn(line: String): Task[Unit] = ???
+  def myPrintLn(line: String): Task[Unit] = ZIO.effect(println(line))
 
   def run(args: List[String]): ZIO[ZEnv, Nothing, Int] =
     (myPrintLn("Hello Again!") as 0) orElse ZIO.succeed(1)

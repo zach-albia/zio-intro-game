@@ -43,6 +43,9 @@ object WorkshopSpec
             output   <- TestConsole.output
           } yield assert(exitCode, equalTo(0)) && assert(output.size, equalTo(100))
         },
+        testM("EffectConversion") {
+          assertM(EffectConversion.run(Nil), equalTo(0))
+        },
         testM("PromptName greets with name") {
           checkM(Gen.alphaNumericString) {
             name =>
