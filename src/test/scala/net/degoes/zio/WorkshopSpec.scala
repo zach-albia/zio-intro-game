@@ -115,11 +115,8 @@ object WorkshopSpec
                     exitCode <- AlarmApp.run(Nil)
                     output   <- TestConsole.output
                   } yield
-                  // program always succeeds because of retry logic
-                  assert(exitCode, equalTo(0)) &&
-                    // lines printed to console = prompts + wake message
-                    assert(output.size, equalTo(tries.size + 1)) &&
-                    assert(output.last.strip, equalTo("Wake up!"))
+                    assert(exitCode, equalTo(0)) && // program always succeeds because of retry logic
+                      assert(output.size, equalTo(tries.size + 1)) // lines printed to console = prompts + 1 wake message
                 }
             }
           },
@@ -145,7 +142,7 @@ object WorkshopSpec
                 }
             }
           }
-        ) @@ ignore,
+        ),
         suite("Board")(
           test("won horizontal first") {
             horizontalFirst(Mark.X) && horizontalFirst(Mark.O)

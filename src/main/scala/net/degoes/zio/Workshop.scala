@@ -170,8 +170,6 @@ object AlarmApp extends App {
   import zio.duration._
   import java.io.IOException
 
-  private val SECONDS_PROMPT = "Please enter the number of seconds to sleep: "
-
   /**
     * EXERCISE 10
     *
@@ -184,10 +182,10 @@ object AlarmApp extends App {
       ZIO.effect(input.toInt.seconds).refineToOrDie[NumberFormatException]
 
     def fallback(input: String): ZIO[Console, IOException, Duration] =
-      parseDuration(input) orElse (putStr(SECONDS_PROMPT) *> getAlarmDuration)
+      parseDuration(input) orElse getAlarmDuration
 
     for {
-      _        <- putStrLn(SECONDS_PROMPT)
+      _        <- putStrLn("Please enter the number of seconds to sleep: ")
       input    <- getStrLn
       duration <- parseDuration(input) orElse fallback(input)
     } yield duration
@@ -202,7 +200,6 @@ object AlarmApp extends App {
     */
   def run(args: List[String]): ZIO[ZEnv, Nothing, Int] =
     (for {
-      _        <- putStr(SECONDS_PROMPT)
       duration <- getAlarmDuration
       _        <- clock.sleep(duration)
       _        <- putStrLn("Wake up!")
