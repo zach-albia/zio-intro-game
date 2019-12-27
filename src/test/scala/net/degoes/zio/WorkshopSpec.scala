@@ -168,7 +168,29 @@ object WorkshopSpec
           },
           testM("prints usage when no path given") {
             assertM(Cat.run(Nil), equalTo(2))
-          }
+          },
+          testM("prints usage when more than one path given") {
+            checkM(Gen.listOf(Gen.const("a")).filter(_.size > 1)) { list =>
+              assertM(Cat.run(list), equalTo(2))
+            }
+          },
+          testM("fails when given path to nonexistent file") {
+            import zio.random._
+
+            def makeNonExistentPath(): ZIO[Blocking with Random, Nothing, Path] =
+              for {
+                length          <- nextInt(12).map(_ + 8)
+                str             <- nextString(length)
+                path            = Path(str)
+                exists          <- Files.exists(path)
+                nonExistentPath <- if (exists) makeNonExistentPath() else ZIO.succeed(path)
+              } yield nonExistentPath
+
+            for {
+              path     <- makeNonExistentPath()
+              exitCode <- Cat.run(List(path.toString))
+            } yield assert(exitCode, equalTo(1))
+          } @@ flaky
         ),
         suite("Board")(
           test("won horizontal first") {
