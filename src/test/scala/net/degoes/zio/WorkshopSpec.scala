@@ -25,6 +25,12 @@ object WorkshopSpec
             output   <- TestConsole.output
           } yield assert(exitCode, equalTo(0)) && assert(output, hasSize(equalTo(1)))
         },
+        testM("PrintSequence") {
+          for {
+            exitCode <- PrintSequence.run(Nil)
+            output   <- TestConsole.output
+          } yield assert(exitCode, equalTo(0)) && assert(output, hasSize(equalTo(3)))
+        },
         testM("ErrorRecovery") {
           for {
             exitCode <- ErrorRecovery.run(Nil)
