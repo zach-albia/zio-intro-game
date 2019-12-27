@@ -191,10 +191,9 @@ object PropertyHelpers {
     }
 
   def waitForSleep(): ZIO[TestClock, Nothing, Unit] =
-    for {
-      sleeps <- TestClock.sleeps
-      _      <- if (sleeps.nonEmpty) ZIO.unit else waitForSleep()
-    } yield ()
+    TestClock.sleeps.flatMap { sleeps =>
+      if (sleeps.nonEmpty) ZIO.unit else waitForSleep()
+    }
 }
 
 object BoardHelpers {
