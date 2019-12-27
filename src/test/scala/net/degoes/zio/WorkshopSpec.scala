@@ -5,12 +5,12 @@ import zio.blocking.Blocking
 import zio.clock.Clock
 import zio.console.Console
 import zio.duration._
+import zio.nio.file.{Files, Path}
 import zio.random.Random
 import zio.system.System
 import zio.test.Assertion._
 import zio.test._
 import zio.test.environment._
-import zio.test.TestAspect.ignore
 
 object WorkshopSpec
     extends DefaultRunnableSpec({
@@ -143,6 +143,22 @@ object WorkshopSpec
             }
           }
         ),
+        suite("Cat") {
+          testM("prints string read from file") {
+            val str  = "Lorem ipsum"
+            val temp = "cat.tmp"
+            val path = Path(temp)
+            for {
+              _        <- Files.writeLines(path, List(str))
+              exitCode <- Cat.run(List(temp))
+              output   <- TestConsole.output
+              exists   <- Files.deleteIfExists(path)
+            } yield
+              assert(exitCode, equalTo(0)) &&
+                assert(output(0).strip, equalTo(str)) &&
+                assert(exists, isTrue)
+          }
+        },
         suite("Board")(
           test("won horizontal first") {
             horizontalFirst(Mark.X) && horizontalFirst(Mark.O)
@@ -173,10 +189,10 @@ object WorkshopSpec
     })
 
 object PropertyHelpers {
-  def clearConsole: ZIO[TestConsole, Nothing, Unit] =
+  def clearConsole =
     TestConsole.clearInput *> TestConsole.clearOutput
 
-  def clearRandom: ZIO[TestRandom, Nothing, Unit] =
+  def clearRandom =
     TestRandom.clearInts *> TestRandom.clearBooleans *>
       TestRandom.clearBytes *> TestRandom.clearChars *>
       TestRandom.clearDoubles *> TestRandom.clearFloats *>

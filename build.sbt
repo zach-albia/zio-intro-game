@@ -25,6 +25,7 @@ addCommandAlias(
 libraryDependencies ++= Seq(
   // ZIO
   "dev.zio" %% "zio" % ZIOVersion,
+  "dev.zio" %% "zio-nio" % "0.4.0",
   "dev.zio" %% "zio-streams" % ZIOVersion,
   "dev.zio" %% "zio-test" % ZIOVersion % "test",
   "dev.zio" %% "zio-test-sbt" % ZIOVersion % "test"
