@@ -12,7 +12,7 @@ lazy val root = project
          |import zio.duration._
          |object replRTS extends DefaultRuntime {}
          |import replRTS._
-         |implicit class RunSyntax[R >: replRTS.Environment, E, A](io: ZIO[R, E, A]){ def unsafeRun: A = replRTS.unsafeRun(io) }
+         |implicit class RunSyntax[R >: ZEnv, E, A](io: ZIO[R, E, A]){ def unsafeRun: A = replRTS.unsafeRun(io) }
     """.stripMargin
   )
 
