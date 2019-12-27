@@ -96,6 +96,7 @@ object EffectConversion extends App {
 
 object ErrorNarrowing extends App {
   import java.io.IOException
+
   import scala.io.StdIn.readLine
   implicit class Unimplemented[A](v: A) {
     def ? = ???
@@ -166,9 +167,10 @@ object NumberGuesser extends App {
 
 object AlarmApp extends App {
 
+  import java.io.IOException
+
   import zio.console._
   import zio.duration._
-  import java.io.IOException
 
   /**
     * EXERCISE 10
@@ -209,9 +211,10 @@ object AlarmApp extends App {
 
 object Cat extends App {
 
-  import zio.console._
-  import zio.blocking._
   import java.io.IOException
+
+  import zio.blocking._
+  import zio.console._
 
   private def openFile(file: String) =
     blocking(ZIO.effect(Source.fromFile(file))).refineToOrDie[IOException]
@@ -248,9 +251,10 @@ object Cat extends App {
 
 object CatIncremental extends App {
 
-  import zio.console._
+  import java.io.{FileInputStream, IOException, InputStream, Console => _}
+
   import zio.blocking._
-  import java.io.{IOException, InputStream, FileInputStream, FileNotFoundException, Console => _}
+  import zio.console._
 
   val CHUNK_SIZE = 1024
 
@@ -259,7 +263,8 @@ object CatIncremental extends App {
     *
     * Implement a `blockingIO` combinator to use in subsequent exercises.
     */
-  def blockingIO[A](a: => A): ZIO[Blocking, IOException, A] = ???
+  def blockingIO[A](a: => A): ZIO[Blocking, IOException, A] =
+    effectBlocking(a).refineToOrDie[IOException]
 
   /**
     * EXERCISE 14
@@ -268,26 +273,18 @@ object CatIncremental extends App {
     * the blocking thread pool.
     */
   final case class FileHandle private (private val is: InputStream) {
-    final def close: ZIO[Blocking, IOException, Unit] = blocking {
-      ZIO.effect(is.close()).refineToOrDie[IOException]
-    }
+    final def close: ZIO[Blocking, IOException, Unit] = blockingIO(is.close())
 
-    final def read: ZIO[Blocking, IOException, Option[Chunk[Byte]]] = blocking {
-      ZIO
-        .effect(
-          if (is.available() == 0) None
-          else Some(Chunk.fromArray(is.readNBytes(CHUNK_SIZE))))
-        .refineToOrDie[IOException]
-    }
+    final def read: ZIO[Blocking, IOException, Option[Chunk[Byte]]] =
+      blockingIO {
+        if (is.available() == 0) None
+        else Some(Chunk.fromArray(is.readNBytes(CHUNK_SIZE)))
+      }
   }
 
   object FileHandle {
     final def open(file: String): ZIO[Blocking, IOException, FileHandle] =
-      blocking {
-        ZIO
-          .effect(FileHandle(new FileInputStream(file)))
-          .refineToOrDie[FileNotFoundException]
-      }
+      blockingIO(FileHandle(new FileInputStream(file)))
   }
 
   /**
@@ -317,10 +314,11 @@ object CatIncremental extends App {
 }
 
 object AlarmAppImproved extends App {
-  import zio.console._
-  import zio.duration._
   import java.io.IOException
   import java.util.concurrent.TimeUnit
+
+  import zio.console._
+  import zio.duration._
 
   lazy val getAlarmDuration: ZIO[Console, IOException, Duration] = {
     def parseDuration(input: String): IO[NumberFormatException, Duration] =
@@ -565,8 +563,8 @@ object StmLunchTime extends App {
 
 object StmPriorityQueue extends App {
   import zio.console._
-  import zio.stm._
   import zio.duration._
+  import zio.stm._
 
   /**
     * EXERCISE 25
@@ -609,7 +607,6 @@ object StmPriorityQueue extends App {
 }
 
 object StmReentrantLock extends App {
-  import zio.console._
   import zio.stm._
 
   private final case class WriteLock(
@@ -695,9 +692,10 @@ object Sharding extends App {
 
 object Hangman extends App {
 
+  import java.io.IOException
+
   import zio.console._
   import zio.random._
-  import java.io.IOException
 
   /**
     * EXERCISE 28
@@ -861,8 +859,9 @@ object Hangman extends App {
   */
 object TicTacToe extends App {
 
-  import zio.console._
   import java.io.IOException
+
+  import zio.console._
 
   sealed trait Mark {
     final def renderChar: Char = this match {
