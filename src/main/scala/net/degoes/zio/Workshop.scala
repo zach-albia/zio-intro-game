@@ -107,7 +107,7 @@ object ErrorNarrowing extends App {
     * Using `ZIO#refineToOrDie`, narrow the error type of the following
     * effect to IOException.
     */
-  val myReadLine: IO[IOException, String] = ??? // ZIO.effect(readLine())
+  val myReadLine: IO[IOException, String] = ZIO.effect(readLine()).refineToOrDie[IOException]
 
   def myPrintLn(line: String): UIO[Unit] = UIO(println(line))
 
