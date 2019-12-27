@@ -389,7 +389,64 @@ object ComputePi extends App {
     * Build a multi-fiber program that estimates the value of `pi`. Print out
     * ongoing estimates continuously until the estimation is complete.
     */
-  def run(args: List[String]): ZIO[ZEnv, Nothing, Int] = ???
+  def run(args: List[String]): ZIO[ZEnv, Nothing, Int] =
+    (for {
+      sampleSize  <- readSampleSize(args)
+      concurrency = getRuntime.availableProcessors // unsafe, i know. too lazy :/
+      state       <- initState
+      workloads   = createWorkloads(sampleSize, concurrency, state)
+      _           <- ZIO.collectAllPar(workloads)
+      _           <- printFinalEstimate(state, sampleSize)
+    } yield ())
+      .foldM(e => putStrLn(e.getMessage) *> ZIO.succeed(1), _ => ZIO.succeed(0))
+
+  private def createWorkloads(sampleSize: Int, concurrency: Int, state: PiState) =
+    workload(state, sampleSize % concurrency) :: // remainder workload
+      List.fill(concurrency - 1)(workload(state, sampleSize / concurrency))
+
+  private def printFinalEstimate(state: PiState, sampleSize: Int) =
+    for {
+      finalInside <- state.inside.get
+      finalTotal  <- state.total.get
+      _ <- putStrLn(
+            s"The final estimate of pi after $sampleSize samples is " +
+              s"${estimatePi(finalInside, finalTotal)}.")
+    } yield ()
+
+  private def readSampleSize(args: List[String]) =
+    args.headOption
+      .map(
+        input =>
+          ZIO
+            .effect(input.toInt)
+            .refineToOrDie[NumberFormatException])
+      .getOrElse(ZIO.fail(new IllegalArgumentException("No sample size given.")))
+
+  def initState: ZIO[Any, Nothing, PiState] =
+    for {
+      inside <- Ref.make(0L)
+      total  <- Ref.make(0L)
+    } yield PiState(inside, total)
+
+  def workload(state: PiState, size: Int): ZIO[Console with Random, Nothing, Unit] =
+    if (size > 0)
+      simulate(state) *> ongoingEstimate(state) *> workload(state, size - 1)
+    else ZIO.unit
+
+  def ongoingEstimate(state: PiState): ZIO[Console, Nothing, Unit] =
+    for {
+      inside     <- state.inside.get
+      total      <- state.total.get
+      piEstimate = estimatePi(inside, total)
+      _          <- putStrLn(s"Pi estimate: $piEstimate")
+    } yield ()
+
+  def simulate(state: PiState): ZIO[Random, Nothing, Unit] =
+    for {
+      point <- randomPoint
+      _     <- state.inside.update(n => if (insideCircle(point._1, point._2)) n + 1 else n)
+      _     <- state.total.update(_ + 1)
+    } yield ()
 }
 
 object StmSwap extends App {
