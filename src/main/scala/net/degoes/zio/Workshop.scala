@@ -298,10 +298,11 @@ object CatIncremental extends App {
     * interruption.
     */
   def run(args: List[String]): ZIO[ZEnv, Nothing, Int] =
-    args.headOption
-      .map(cat)
-      .getOrElse(ZIO.unit)
-      .foldM(e => putStrLn(e.getMessage) *> ZIO.succeed(1), _ => ZIO.succeed(0))
+    args match {
+      case file :: Nil =>
+        cat(file).foldM(e => putStrLn(e.getMessage) *> ZIO.succeed(1), _ => ZIO.succeed(0))
+      case _ => putStrLn("Usage: cat <file>") as 2
+    }
 
   def cat(file: String): ZIO[Console with Blocking, IOException, Unit] =
     ZManaged.make(FileHandle.open(file))(_.close.orDie).use(read)

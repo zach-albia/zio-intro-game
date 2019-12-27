@@ -1,13 +1,12 @@
 package net.degoes.zio
 
-import java.nio.file.Paths
-
+import net.degoes.zio.PropertyHelpers.clearConsole
 import zio.ZIO
 import zio.blocking.Blocking
 import zio.clock.Clock
 import zio.console.Console
 import zio.duration._
-import zio.nio.file.{FileSystem, Files, Path}
+import zio.nio.file.{Files, Path}
 import zio.random.Random
 import zio.system.System
 import zio.test.Assertion._
@@ -19,6 +18,7 @@ object WorkshopSpec
     extends DefaultRunnableSpec({
       import BoardHelpers._
       import PropertyHelpers._
+      import Suites._
       import TicTacToe._
 
       suite("Workshop tests")(
@@ -146,52 +146,8 @@ object WorkshopSpec
             }
           }
         ),
-        suite("Cat")(
-          testM("prints string read from file") {
-            val contents = Gen.vectorOf(Gen.string(Gen.printableChar).filter(_.nonEmpty))
-            checkM(contents) {
-              contents =>
-                for {
-                  _        <- clearConsole
-                  tempFile <- Files.createTempFile(".tmp", None, List.empty)
-                  _        <- Files.writeLines(tempFile, contents)
-                  absPath  <- tempFile.toAbsolutePath
-                  exitCode <- Cat.run(List(absPath.toString))
-                  output   <- TestConsole.output
-                  exists   <- Files.deleteIfExists(tempFile)
-                  lines    = output(0).split("\\s+").toVector
-                } yield
-                  assert(exitCode, equalTo(0)) &&
-                    assert(lines, equalTo(contents)) &&
-                    assert(exists, isTrue)
-            }
-          },
-          testM("prints usage when no path given") {
-            assertM(Cat.run(Nil), equalTo(2))
-          },
-          testM("prints usage when more than one path given") {
-            checkM(Gen.listOf(Gen.const("a")).filter(_.size > 1)) { list =>
-              assertM(Cat.run(list), equalTo(2))
-            }
-          },
-          testM("fails when given path to nonexistent file") {
-            import zio.random._
-
-            def makeNonExistentPath(): ZIO[Blocking with Random, Nothing, Path] =
-              for {
-                length          <- nextInt(12).map(_ + 8)
-                str             <- nextString(length)
-                path            = Path(str)
-                exists          <- Files.exists(path)
-                nonExistentPath <- if (exists) makeNonExistentPath() else ZIO.succeed(path)
-              } yield nonExistentPath
-
-            for {
-              path     <- makeNonExistentPath()
-              exitCode <- Cat.run(List(path.toString))
-            } yield assert(exitCode, equalTo(1))
-          } @@ flaky
-        ),
+        catSuite(Cat, "Cat"),
+        catSuite(CatIncremental, "CatIncremental"),
         suite("Board")(
           test("won horizontal first") {
             horizontalFirst(Mark.X) && horizontalFirst(Mark.O)
@@ -252,6 +208,56 @@ object PropertyHelpers {
     TestClock.sleeps.flatMap { sleeps =>
       if (sleeps.nonEmpty) ZIO.unit else waitForSleep()
     }
+}
+
+object Suites {
+
+  def catSuite(cat: zio.App, label: String) = suite(label)(
+    testM("prints string read from file") {
+      val contents = Gen.vectorOf(Gen.string(Gen.printableChar).filter(_.nonEmpty))
+      checkM(contents) {
+        contents =>
+          for {
+            _        <- clearConsole
+            tempFile <- Files.createTempFile(".tmp", None, List.empty)
+            _        <- Files.writeLines(tempFile, contents)
+            absPath  <- tempFile.toAbsolutePath
+            exitCode <- cat.run(List(absPath.toString))
+            output   <- TestConsole.output
+            exists   <- Files.deleteIfExists(tempFile)
+            lines    = output.mkString.split("\\s+").toVector.filter(_.nonEmpty)
+          } yield
+            assert(exitCode, equalTo(0)) &&
+              assert(lines, equalTo(contents)) &&
+              assert(exists, isTrue)
+      }
+    },
+    testM("prints usage when no path given") {
+      assertM(cat.run(Nil), equalTo(2))
+    },
+    testM("prints usage when more than one path given") {
+      checkM(Gen.listOf(Gen.const("a")).filter(_.size > 1)) { list =>
+        assertM(cat.run(list), equalTo(2))
+      }
+    },
+    testM("fails when given path to nonexistent file") {
+      import zio.random._
+
+      def makeNonExistentPath(): ZIO[Blocking with Random, Nothing, Path] =
+        for {
+          length          <- nextInt(12).map(_ + 8)
+          str             <- nextString(length)
+          path            = Path(str)
+          exists          <- Files.exists(path)
+          nonExistentPath <- if (exists) makeNonExistentPath() else ZIO.succeed(path)
+        } yield nonExistentPath
+
+      for {
+        path     <- makeNonExistentPath()
+        exitCode <- cat.run(List(path.toString))
+      } yield assert(exitCode, equalTo(1))
+    } @@ flaky
+  )
 }
 
 object BoardHelpers {
