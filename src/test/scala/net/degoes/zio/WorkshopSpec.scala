@@ -146,7 +146,7 @@ object WorkshopSpec
             }
           }
         ),
-        suite("Cat") {
+        suite("Cat")(
           testM("prints string read from file") {
             val contents = Gen.vectorOf(Gen.string(Gen.printableChar).filter(_.nonEmpty))
             checkM(contents) {
@@ -165,8 +165,11 @@ object WorkshopSpec
                     assert(lines, equalTo(contents)) &&
                     assert(exists, isTrue)
             }
+          },
+          testM("prints usage when no path given") {
+            assertM(Cat.run(Nil), equalTo(2))
           }
-        },
+        ),
         suite("Board")(
           test("won horizontal first") {
             horizontalFirst(Mark.X) && horizontalFirst(Mark.O)
