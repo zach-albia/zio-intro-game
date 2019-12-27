@@ -346,7 +346,15 @@ object AlarmAppImproved extends App {
     * prints out a wakeup alarm message, like "Time to wakeup!!!".
     */
   def run(args: List[String]): ZIO[ZEnv, Nothing, Int] =
-    ???
+    (for {
+      duration  <- getAlarmDuration
+      printDot  = putStr(".") *> clock.sleep(1.second)
+      printDots = ZIO.replicate((duration.toMillis / 1000).toInt)(printDot)
+      _         <- ZIO.sequence(printDots).fork
+      _         <- clock.sleep(duration)
+      _         <- putStrLn("Wake up!")
+    } yield ())
+      .foldM(e => putStrLn(e.getMessage) *> ZIO.succeed(1), _ => ZIO.succeed(0))
 }
 
 object ComputePi extends App {
