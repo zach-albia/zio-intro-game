@@ -148,14 +148,26 @@ object WorkshopSpec
         catSuite(CatIncremental, "CatIncremental"),
         suite("AlarmAppImproved")(
           testM("prints a dot a second then wakes up") {
-            for {
-              _        <- TestConsole.feedLines("x", "5")
-              _        <- TestClock.adjust(5.seconds)
-              exitCode <- AlarmAppImproved.run(Nil)
-              output   <- TestConsole.output
-            } yield
-              assert(exitCode, equalTo(0)) &&
-                assert(output.size, equalTo(9))
+            val tries = for {
+              badInputs <- Gen.listOf(Gen.alphaNumericString.filter(_.forall(!_.isDigit)))
+              goodInput <- Gen.int(0, 3600 /* hour's worth of dots */ ).map(_.toString)
+            } yield (badInputs.toVector :+ goodInput, goodInput)
+            checkM(tries) {
+              case (tries, goodTry) =>
+                resetClock {
+                  for {
+                    _        <- clearConsole
+                    _        <- TestConsole.feedLines(tries: _*)
+                    duration = goodTry.toInt
+                    _        <- TestClock.adjust(duration.seconds)
+                    exitCode <- AlarmAppImproved.run(Nil)
+                    output   <- TestConsole.output
+                    expected = (tries.size * 2) + duration
+                  } yield
+                    assert(exitCode, equalTo(0)) &&
+                      assert(output.size, equalTo(expected))
+                }
+            }
           }
         ),
         suite("Board")(
