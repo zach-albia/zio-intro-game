@@ -134,16 +134,26 @@ object WorkshopSpec
             (out, duration) => (out.size * 2) + duration
           ),
           testM("Never wakes up before alarm goes off") {
-            for {
-              _        <- TestConsole.feedLines("5")
-              _        <- TestClock.adjust(3.seconds)
-              fiber    <- AlarmAppImproved.run(Nil).fork
-              _        <- TestClock.sleeps.doUntil(_.nonEmpty)
-              exit     <- fiber.interrupt
-              output   <- TestConsole.output
-              expected = 1 + 4
-            } yield assert(exit, isInterrupted) && assert(output.size, equalTo(expected))
-          } @@ TestAspect.timeout(5.seconds)
+            val times = for {
+              sleepTime   <- Gen.int(1, 3600)
+              beforeAlarm <- Gen.int(0, sleepTime - 1)
+            } yield (sleepTime, beforeAlarm)
+            checkM(times) {
+              case (sleepTime, beforeAlarm) =>
+                resetClock {
+                  for {
+                    _      <- clearConsole
+                    _      <- TestConsole.feedLines(sleepTime.toString)
+                    _      <- TestClock.adjust(beforeAlarm.seconds)
+                    fiber  <- AlarmAppImproved.run(Nil).fork
+                    _      <- TestClock.sleeps.doUntil(_.nonEmpty)
+                    exit   <- fiber.interrupt
+                    output <- TestConsole.output
+                    prints = output.map(_.strip)
+                  } yield assert(exit, isInterrupted) && assert(prints, not(contains("Wake up!")))
+                }
+            }
+          }
         ),
         suite("Board")(
           test("won horizontal first") {
