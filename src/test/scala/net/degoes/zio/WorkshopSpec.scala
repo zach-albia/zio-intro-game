@@ -132,7 +132,18 @@ object WorkshopSpec
             AlarmAppImproved,
             3600, // an hour's worth of dots, too many and tests run slow
             (out, duration) => (out.size * 2) + duration
-          )
+          ),
+          testM("Never wakes up before alarm goes off") {
+            for {
+              _        <- TestConsole.feedLines("5")
+              _        <- TestClock.adjust(3.seconds)
+              fiber    <- AlarmAppImproved.run(Nil).fork
+              _        <- TestClock.sleeps.doUntil(_.nonEmpty)
+              exit     <- fiber.interrupt
+              output   <- TestConsole.output
+              expected = 1 + 4
+            } yield assert(exit, isInterrupted) && assert(output.size, equalTo(expected))
+          } @@ TestAspect.timeout(5.seconds)
         ),
         suite("Board")(
           test("won horizontal first") {
