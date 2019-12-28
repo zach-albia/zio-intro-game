@@ -184,7 +184,7 @@ object AlarmApp extends App {
       ZIO.effect(input.toInt.seconds).refineToOrDie[NumberFormatException]
 
     def fallback(input: String): ZIO[Console, IOException, Duration] =
-      parseDuration(input) orElse getAlarmDuration
+      parseDuration(input) orElse putStrLn("You didn't enter the number of seconds!") *> getAlarmDuration
 
     for {
       _        <- putStrLn("Please enter the number of seconds to sleep: ")
@@ -331,7 +331,7 @@ object AlarmAppImproved extends App {
     val fallback = putStrLn("You didn't enter the number of seconds!") *> getAlarmDuration
 
     for {
-      _        <- putStrLn("Please enter the number of seconds to sleep: ")
+      _        <- putStr("Please enter the number of seconds to sleep: ")
       input    <- getStrLn
       duration <- parseDuration(input) orElse fallback
     } yield duration
@@ -348,10 +348,9 @@ object AlarmAppImproved extends App {
   def run(args: List[String]): ZIO[ZEnv, Nothing, Int] =
     (for {
       duration  <- getAlarmDuration
-      printDot  = putStr(".") *> clock.sleep(1.second)
-      printDots = ZIO.replicate((duration.toMillis / 1000).toInt)(printDot)
-      _         <- ZIO.sequence(printDots).fork
-      _         <- clock.sleep(duration)
+      times     = (duration.toMillis / 1000).toInt - 1
+      printDots = (putStr(".") *> clock.sleep(1.second)).repeat(Schedule.recurs(times))
+      _         <- clock.sleep(duration) &> printDots
       _         <- putStrLn("Wake up!")
     } yield ())
       .foldM(e => putStrLn(e.getMessage) *> ZIO.succeed(1), _ => ZIO.succeed(0))

@@ -1,6 +1,5 @@
 package net.degoes.zio
 
-import net.degoes.zio.PropertyHelpers.clearConsole
 import zio.ZIO
 import zio.blocking.Blocking
 import zio.clock.Clock
@@ -10,7 +9,6 @@ import zio.nio.file.{Files, Path}
 import zio.random.Random
 import zio.system.System
 import zio.test.Assertion._
-import zio.test.TestAspect._
 import zio.test._
 import zio.test.environment._
 
@@ -119,7 +117,7 @@ object WorkshopSpec
                     output   <- TestConsole.output
                   } yield
                     assert(exitCode, equalTo(0)) && // program always succeeds because of retry logic
-                      assert(output.size, equalTo(tries.size + 1)) // lines printed to console = prompts + 1 wake message
+                      assert(output.size, equalTo(tries.size * 2)) // lines printed to console = prompts + 1 wake message
                 }
             }
           },
@@ -136,7 +134,7 @@ object WorkshopSpec
                     _      <- TestConsole.feedLines(sleepTime.toString)
                     _      <- TestClock.adjust(beforeAlarm.seconds)
                     fiber  <- AlarmApp.run(Nil).fork
-                    _      <- waitForSleep()
+                    _      <- TestClock.sleeps.doUntil(_.nonEmpty)
                     exit   <- fiber.interrupt
                     output <- TestConsole.output
                   } yield
@@ -148,6 +146,18 @@ object WorkshopSpec
         ),
         catSuite(Cat, "Cat"),
         catSuite(CatIncremental, "CatIncremental"),
+        suite("AlarmAppImproved")(
+          testM("prints a dot a second then wakes up") {
+            for {
+              _        <- TestConsole.feedLines("x", "5")
+              _        <- TestClock.adjust(5.seconds)
+              exitCode <- AlarmAppImproved.run(Nil)
+              output   <- TestConsole.output
+            } yield
+              assert(exitCode, equalTo(0)) &&
+                assert(output.size, equalTo(9))
+          }
+        ),
         suite("Board")(
           test("won horizontal first") {
             horizontalFirst(Mark.X) && horizontalFirst(Mark.O)
@@ -177,7 +187,68 @@ object WorkshopSpec
       )
     })
 
+object Suites {
+  import PropertyHelpers._
+
+  def catSuite(cat: zio.App, label: String) =
+    suite(label)(
+      testM("prints string read from file") {
+        val contents = Gen.vectorOf(Gen.string(Gen.printableChar).filter(_.nonEmpty))
+        checkM(contents) {
+          contents =>
+            for {
+              _        <- clearConsole
+              tempFile <- Files.createTempFile(".tmp", None, List.empty)
+              _        <- Files.writeLines(tempFile, contents)
+              absPath  <- tempFile.toAbsolutePath
+              exitCode <- cat.run(List(absPath.toString))
+              output   <- TestConsole.output
+              exists   <- Files.deleteIfExists(tempFile)
+              lines    = output.mkString.split("\\s+").toVector.filter(_.nonEmpty)
+            } yield
+              assert(exitCode, equalTo(0)) &&
+                assert(lines, equalTo(contents)) &&
+                assert(exists, isTrue)
+        }
+      },
+      testM("prints usage when no path given") {
+        assertM(cat.run(Nil), equalTo(2))
+      },
+      testM("prints usage when more than one path given") {
+        checkM(Gen.listOf(Gen.const("a")).filter(_.size > 1)) { list =>
+          assertM(cat.run(list), equalTo(2))
+        }
+      },
+      testM("fails when given path to nonexistent file") {
+        import zio.random._
+
+        def makeNonExistentPath(): ZIO[Blocking with Random, Nothing, Path] =
+          for {
+            length          <- nextInt(12).map(_ + 8)
+            str             <- nextString(length)
+            path            = Path(str)
+            exists          <- Files.exists(path)
+            nonExistentPath <- if (exists) makeNonExistentPath() else ZIO.succeed(path)
+          } yield nonExistentPath
+
+        for {
+          path     <- makeNonExistentPath()
+          exitCode <- cat.run(List(path.toString))
+        } yield assert(exitCode, equalTo(1))
+      } @@ TestAspect.flaky
+    )
+}
+
 object PropertyHelpers {
+  trait WorkshopTestEnvironment
+      extends TestConsole
+      with TestClock
+      with Clock
+      with Console
+      with System
+      with Random
+      with Blocking
+
   def clearConsole =
     TestConsole.clearInput *> TestConsole.clearOutput
 
@@ -187,13 +258,12 @@ object PropertyHelpers {
       TestRandom.clearDoubles *> TestRandom.clearFloats *>
       TestRandom.clearLongs *> TestRandom.clearStrings
 
-  def resetClock(test: ZIO[TestConsole with TestClock with zio.ZEnv, Nothing, TestResult]) =
+  def resetClock(test: ZIO[WorkshopTestEnvironment, Nothing, TestResult]) =
     test.provideSomeManaged {
       for {
         env      <- ZIO.environment[zio.ZEnv with TestConsole].toManaged_
         newClock <- TestClock.make(TestClock.DefaultData)
-        testEnv = new TestConsole with TestClock with Clock with Console with System with Random
-        with Blocking {
+        testEnv = new WorkshopTestEnvironment {
           override val console: TestConsole.Service[Any] = env.console
           override val blocking: Blocking.Service[Any]   = env.blocking
           override val random: Random.Service[Any]       = env.random
@@ -203,61 +273,6 @@ object PropertyHelpers {
         }
       } yield testEnv
     }
-
-  def waitForSleep(): ZIO[TestClock, Nothing, Unit] =
-    TestClock.sleeps.flatMap { sleeps =>
-      if (sleeps.nonEmpty) ZIO.unit else waitForSleep()
-    }
-}
-
-object Suites {
-
-  def catSuite(cat: zio.App, label: String) = suite(label)(
-    testM("prints string read from file") {
-      val contents = Gen.vectorOf(Gen.string(Gen.printableChar).filter(_.nonEmpty))
-      checkM(contents) {
-        contents =>
-          for {
-            _        <- clearConsole
-            tempFile <- Files.createTempFile(".tmp", None, List.empty)
-            _        <- Files.writeLines(tempFile, contents)
-            absPath  <- tempFile.toAbsolutePath
-            exitCode <- cat.run(List(absPath.toString))
-            output   <- TestConsole.output
-            exists   <- Files.deleteIfExists(tempFile)
-            lines    = output.mkString.split("\\s+").toVector.filter(_.nonEmpty)
-          } yield
-            assert(exitCode, equalTo(0)) &&
-              assert(lines, equalTo(contents)) &&
-              assert(exists, isTrue)
-      }
-    },
-    testM("prints usage when no path given") {
-      assertM(cat.run(Nil), equalTo(2))
-    },
-    testM("prints usage when more than one path given") {
-      checkM(Gen.listOf(Gen.const("a")).filter(_.size > 1)) { list =>
-        assertM(cat.run(list), equalTo(2))
-      }
-    },
-    testM("fails when given path to nonexistent file") {
-      import zio.random._
-
-      def makeNonExistentPath(): ZIO[Blocking with Random, Nothing, Path] =
-        for {
-          length          <- nextInt(12).map(_ + 8)
-          str             <- nextString(length)
-          path            = Path(str)
-          exists          <- Files.exists(path)
-          nonExistentPath <- if (exists) makeNonExistentPath() else ZIO.succeed(path)
-        } yield nonExistentPath
-
-      for {
-        path     <- makeNonExistentPath()
-        exitCode <- cat.run(List(path.toString))
-      } yield assert(exitCode, equalTo(1))
-    } @@ flaky
-  )
 }
 
 object BoardHelpers {
