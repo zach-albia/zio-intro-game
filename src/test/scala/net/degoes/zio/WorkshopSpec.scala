@@ -102,28 +102,7 @@ object WorkshopSpec
         ),
         suite("AlarmApp")(
           alarmTest(AlarmApp, Int.MaxValue, (out, _) => out.size * 2),
-          testM("Never wakes up before alarm goes off") {
-            val times = for {
-              sleepTime   <- Gen.int(1, Int.MaxValue)
-              beforeAlarm <- Gen.int(0, sleepTime - 1)
-            } yield (sleepTime, beforeAlarm)
-            checkM(times) {
-              case (sleepTime, beforeAlarm) =>
-                resetClock {
-                  for {
-                    _      <- clearConsole
-                    _      <- TestConsole.feedLines(sleepTime.toString)
-                    _      <- TestClock.adjust(beforeAlarm.seconds)
-                    fiber  <- AlarmApp.run(Nil).fork
-                    _      <- TestClock.sleeps.doUntil(_.nonEmpty)
-                    exit   <- fiber.interrupt
-                    output <- TestConsole.output
-                  } yield
-                    assert(exit, isInterrupted) && // alarm has not gone off
-                      assert(output.size, equalTo(1)) // only prompt message written
-                }
-            }
-          }
+          testAlarmNeverWakesBeforeTime(AlarmApp, maxSleepTime = Int.MaxValue)
         ),
         catSuite(Cat, "Cat"),
         catSuite(CatIncremental, "CatIncremental"),
@@ -133,27 +112,7 @@ object WorkshopSpec
             3600, // an hour's worth of dots, too many and tests run slow
             (out, duration) => (out.size * 2) + duration
           ),
-          testM("Never wakes up before alarm goes off") {
-            val times = for {
-              sleepTime   <- Gen.int(1, 3600)
-              beforeAlarm <- Gen.int(0, sleepTime - 1)
-            } yield (sleepTime, beforeAlarm)
-            checkM(times) {
-              case (sleepTime, beforeAlarm) =>
-                resetClock {
-                  for {
-                    _      <- clearConsole
-                    _      <- TestConsole.feedLines(sleepTime.toString)
-                    _      <- TestClock.adjust(beforeAlarm.seconds)
-                    fiber  <- AlarmAppImproved.run(Nil).fork
-                    _      <- TestClock.sleeps.doUntil(_.nonEmpty)
-                    exit   <- fiber.interrupt
-                    output <- TestConsole.output
-                    prints = output.map(_.strip)
-                  } yield assert(exit, isInterrupted) && assert(prints, not(contains("Wake up!")))
-                }
-            }
-          }
+          testAlarmNeverWakesBeforeTime(AlarmAppImproved, maxSleepTime = 3600)
         ),
         suite("Board")(
           test("won horizontal first") {
@@ -260,6 +219,30 @@ object Suites {
           }
       }
     }
+
+  def testAlarmNeverWakesBeforeTime(
+      app: zio.App,
+      maxSleepTime: Int): ZSpec[zio.ZEnv with TestConsole, Nothing, String, Unit] = {
+    testM("Never wakes up before alarm goes off") {
+      val times = for {
+        sleepTime   <- Gen.int(1, maxSleepTime)
+        beforeAlarm <- Gen.int(0, sleepTime - 1)
+      } yield (sleepTime, beforeAlarm)
+      checkM(times) {
+        case (sleepTime, beforeAlarm) =>
+          resetClock {
+            for {
+              _     <- clearConsole
+              _     <- TestConsole.feedLines(sleepTime.toString)
+              _     <- TestClock.adjust(beforeAlarm.seconds)
+              fiber <- app.run(Nil).fork
+              _     <- TestClock.sleeps.doUntil(_.nonEmpty)
+              exit  <- fiber.interrupt
+            } yield assert(exit, isInterrupted)
+          }
+      }
+    }
+  }
 }
 
 object PropertyHelpers {
