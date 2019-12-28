@@ -101,26 +101,7 @@ object WorkshopSpec
           }
         ),
         suite("AlarmApp")(
-          testM("Retries until good input given then wakes up") {
-            val tries = for {
-              badInputs <- Gen.listOf(Gen.alphaNumericString.filter(_.forall(!_.isDigit)))
-              goodInput <- Gen.int(1, Int.MaxValue).map(_.toString)
-            } yield (badInputs.toVector :+ goodInput, goodInput)
-            checkM(tries) {
-              case (tries, goodTry) =>
-                resetClock {
-                  for {
-                    _        <- clearConsole
-                    _        <- TestConsole.feedLines(tries: _*)
-                    _        <- TestClock.adjust(goodTry.toInt.seconds)
-                    exitCode <- AlarmApp.run(Nil)
-                    output   <- TestConsole.output
-                  } yield
-                    assert(exitCode, equalTo(0)) && // program always succeeds because of retry logic
-                      assert(output.size, equalTo(tries.size * 2)) // lines printed to console = prompts + 1 wake message
-                }
-            }
-          },
+          alarmTest(AlarmApp, Int.MaxValue, (out, _) => out.size * 2),
           testM("Never wakes up before alarm goes off") {
             val times = for {
               sleepTime   <- Gen.int(1, Int.MaxValue)
@@ -147,28 +128,11 @@ object WorkshopSpec
         catSuite(Cat, "Cat"),
         catSuite(CatIncremental, "CatIncremental"),
         suite("AlarmAppImproved")(
-          testM("prints a dot a second then wakes up") {
-            val tries = for {
-              badInputs <- Gen.listOf(Gen.alphaNumericString.filter(_.forall(!_.isDigit)))
-              goodInput <- Gen.int(0, 3600 /* hour's worth of dots */ ).map(_.toString)
-            } yield (badInputs.toVector :+ goodInput, goodInput)
-            checkM(tries) {
-              case (tries, goodTry) =>
-                resetClock {
-                  for {
-                    _        <- clearConsole
-                    _        <- TestConsole.feedLines(tries: _*)
-                    duration = goodTry.toInt
-                    _        <- TestClock.adjust(duration.seconds)
-                    exitCode <- AlarmAppImproved.run(Nil)
-                    output   <- TestConsole.output
-                    expected = (tries.size * 2) + duration
-                  } yield
-                    assert(exitCode, equalTo(0)) &&
-                      assert(output.size, equalTo(expected))
-                }
-            }
-          }
+          alarmTest(
+            AlarmAppImproved,
+            3600, // an hour's worth of dots, too many and tests run slow
+            (out, duration) => (out.size * 2) + duration
+          )
         ),
         suite("Board")(
           test("won horizontal first") {
@@ -249,6 +213,32 @@ object Suites {
         } yield assert(exitCode, equalTo(1))
       } @@ TestAspect.flaky
     )
+
+  def alarmTest(alarmApp: zio.App,
+                maxSleepTime: Int,
+                expectedOutputSize: (Vector[String], Int) => Int) =
+    testM("Retries until good input given then wakes up") {
+      val tries = for {
+        badInputs <- Gen.listOf(Gen.alphaNumericString.filter(_.forall(!_.isDigit)))
+        goodInput <- Gen.int(1, maxSleepTime).map(_.toString)
+      } yield (badInputs.toVector :+ goodInput, goodInput)
+      checkM(tries) {
+        case (tries, goodTry) =>
+          resetClock {
+            for {
+              _        <- clearConsole
+              _        <- TestConsole.feedLines(tries: _*)
+              duration = goodTry.toInt
+              _        <- TestClock.adjust(duration.seconds)
+              exitCode <- alarmApp.run(Nil)
+              output   <- TestConsole.output
+              expected = expectedOutputSize(tries, duration)
+            } yield
+              assert(exitCode, equalTo(0)) && // program always succeeds because of retry logic
+                assert(output.size, equalTo(expected)) // lines printed to console = prompts + 1 wake message
+          }
+      }
+    }
 }
 
 object PropertyHelpers {
