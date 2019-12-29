@@ -357,7 +357,6 @@ object AlarmAppImproved extends App {
 }
 
 object ComputePi extends App {
-
   import zio.random._
   import zio.console._
   import zio.clock._
@@ -369,7 +368,10 @@ object ComputePi extends App {
     * Some state to keep track of all points inside a circle,
     * and total number of points.
     */
-  final case class PiState(inside: Ref[Long], total: Ref[Long])
+  final case class PiState(
+      inside: Ref[Long],
+      total: Ref[Long]
+  )
 
   /**
     * A function to estimate pi.

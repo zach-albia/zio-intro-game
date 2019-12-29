@@ -151,19 +151,19 @@ object Suites {
       testM("prints string read from file") {
         val contents = Gen.vectorOf(Gen.string(Gen.printableChar).filter(_.nonEmpty))
         checkM(contents) {
-          contents =>
+          contentsWrittenToFile =>
             for {
-              _        <- clearConsole
-              tempFile <- Files.createTempFile(".tmp", None, List.empty)
-              _        <- Files.writeLines(tempFile, contents)
-              absPath  <- tempFile.toAbsolutePath
-              exitCode <- cat.run(List(absPath.toString))
-              output   <- TestConsole.output
-              exists   <- Files.deleteIfExists(tempFile)
-              lines    = output.mkString.split("\\s+").toVector.filter(_.nonEmpty)
+              _         <- clearConsole
+              tempFile  <- Files.createTempFile(".tmp", None, List.empty)
+              _         <- Files.writeLines(tempFile, contentsWrittenToFile)
+              absPath   <- tempFile.toAbsolutePath
+              exitCode  <- cat.run(List(absPath.toString))
+              output    <- TestConsole.output
+              exists    <- Files.deleteIfExists(tempFile)
+              linesRead = output.mkString.split("\\s+").toVector.filter(_.nonEmpty)
             } yield
               assert(exitCode, equalTo(0)) &&
-                assert(lines, equalTo(contents)) &&
+                assert(linesRead, equalTo(contentsWrittenToFile)) &&
                 assert(exists, isTrue)
         }
       },
@@ -191,7 +191,7 @@ object Suites {
           path     <- makeNonExistentPath()
           exitCode <- cat.run(List(path.toString))
         } yield assert(exitCode, equalTo(1))
-      } @@ TestAspect.flaky
+      } @@ TestAspect.flaky // On the off-chance files get messed up
     )
 
   def alarmTest(alarmApp: zio.App,
