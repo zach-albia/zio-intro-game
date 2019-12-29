@@ -359,9 +359,6 @@ object AlarmAppImproved extends App {
 object ComputePi extends App {
   import zio.random._
   import zio.console._
-  import zio.clock._
-  import zio.duration._
-  import zio.stm._
   import java.lang.Runtime.getRuntime
 
   /**
@@ -403,15 +400,49 @@ object ComputePi extends App {
       sampleSize  <- readSampleSize(args)
       concurrency = getRuntime.availableProcessors // unsafe, i know. too lazy :/
       state       <- initState
-      workloads   = createWorkloads(sampleSize, concurrency, state)
-      _           <- ZIO.collectAllPar(workloads)
+      _           <- runSimulation(sampleSize, concurrency, state)
       _           <- printFinalEstimate(state, sampleSize)
     } yield ())
-      .foldM(e => putStrLn(e.getMessage) *> ZIO.succeed(1), _ => ZIO.succeed(0))
+      .foldM(e => putStrLn(e.getMessage) as 1, _ => ZIO.succeed(0))
 
-  private def createWorkloads(sampleSize: Int, concurrency: Int, state: PiState) =
-    workload(state, sampleSize % concurrency) :: // remainder workload
-      List.fill(concurrency - 1)(workload(state, sampleSize / concurrency))
+  private def readSampleSize(args: List[String]): IO[IllegalArgumentException, Int] =
+    args.headOption.fold[IO[IllegalArgumentException, Int]](
+      ZIO.fail(new IllegalArgumentException("No sample size given."))) { input: String =>
+      ZIO.effect(input.toInt).refineToOrDie[NumberFormatException]
+    }
+
+  def initState: ZIO[Any, Nothing, PiState] =
+    for {
+      inside <- Ref.make(0L)
+      total  <- Ref.make(0L)
+    } yield PiState(inside, total)
+
+  def runSimulation(sampleSize: Int,
+                    concurrency: Int,
+                    state: PiState): ZIO[Console with Random, Nothing, Unit] = {
+    val remainderWorkload = workload(state, sampleSize % concurrency)
+    val workloadCount     = sampleSize / concurrency
+    val workloads         = List.fill(concurrency - 1)(workload(state, workloadCount))
+    ZIO.collectAllPar(remainderWorkload :: workloads).unit
+  }
+
+  private def workload(state: PiState, size: Int) =
+    (addPoint(state) *> ongoingEstimate(state)).repeat(Schedule.recurs(size)).unit
+
+  private def ongoingEstimate(state: PiState) =
+    for {
+      inside     <- state.inside.get
+      total      <- state.total.get
+      piEstimate = estimatePi(inside, total)
+      _          <- putStrLn(s"Pi estimate: $piEstimate")
+    } yield ()
+
+  private def addPoint(state: PiState): ZIO[Random, Nothing, Unit] =
+    for {
+      point <- randomPoint
+      _     <- state.inside.update(n => if (insideCircle(point._1, point._2)) n + 1 else n)
+      _     <- state.total.update(_ + 1)
+    } yield ()
 
   private def printFinalEstimate(state: PiState, sampleSize: Int) =
     for {
@@ -420,41 +451,6 @@ object ComputePi extends App {
       _ <- putStrLn(
             s"The final estimate of pi after $sampleSize samples is " +
               s"${estimatePi(finalInside, finalTotal)}.")
-    } yield ()
-
-  private def readSampleSize(args: List[String]) =
-    args.headOption
-      .map(
-        input =>
-          ZIO
-            .effect(input.toInt)
-            .refineToOrDie[NumberFormatException])
-      .getOrElse(ZIO.fail(new IllegalArgumentException("No sample size given.")))
-
-  def initState: ZIO[Any, Nothing, PiState] =
-    for {
-      inside <- Ref.make(0L)
-      total  <- Ref.make(0L)
-    } yield PiState(inside, total)
-
-  def workload(state: PiState, size: Int): ZIO[Console with Random, Nothing, Unit] =
-    if (size > 0)
-      simulate(state) *> ongoingEstimate(state) *> workload(state, size - 1)
-    else ZIO.unit
-
-  def ongoingEstimate(state: PiState): ZIO[Console, Nothing, Unit] =
-    for {
-      inside     <- state.inside.get
-      total      <- state.total.get
-      piEstimate = estimatePi(inside, total)
-      _          <- putStrLn(s"Pi estimate: $piEstimate")
-    } yield ()
-
-  def simulate(state: PiState): ZIO[Random, Nothing, Unit] =
-    for {
-      point <- randomPoint
-      _     <- state.inside.update(n => if (insideCircle(point._1, point._2)) n + 1 else n)
-      _     <- state.total.update(_ + 1)
     } yield ()
 }
 

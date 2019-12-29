@@ -16,7 +16,7 @@ object WorkshopSpec
     extends DefaultRunnableSpec({
       import BoardHelpers._
       import PropertyHelpers._
-      import Suites._
+      import CommonSpecs._
       import TicTacToe._
 
       suite("Workshop tests")(
@@ -109,7 +109,7 @@ object WorkshopSpec
         suite("AlarmAppImproved")(
           alarmTest(
             AlarmAppImproved,
-            3600, // an hour's worth of dots, too many and tests run slow
+            3600, // an hour's worth of dots; much more and tests run for too long
             (out, duration) => (out.size * 2) + duration
           ),
           testAlarmNeverWakesBeforeTime(AlarmAppImproved, maxSleepTime = 3600)
@@ -143,7 +143,7 @@ object WorkshopSpec
       )
     })
 
-object Suites {
+object CommonSpecs {
   import PropertyHelpers._
 
   def catSuite(cat: zio.App, label: String) =
