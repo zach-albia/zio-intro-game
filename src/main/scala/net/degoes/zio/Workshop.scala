@@ -405,7 +405,7 @@ object ComputePi extends App {
     } yield ())
       .foldM(e => putStrLn(e.getMessage) as 1, _ => ZIO.succeed(0))
 
-  private def readSampleSize(args: List[String]): IO[IllegalArgumentException, Int] =
+  private def readSampleSize(args: List[String]) =
     args.headOption.fold[IO[IllegalArgumentException, Int]](
       ZIO.fail(new IllegalArgumentException("No sample size given."))) { input: String =>
       ZIO.effect(input.toInt).refineToOrDie[NumberFormatException]
@@ -422,26 +422,27 @@ object ComputePi extends App {
                     state: PiState): ZIO[Console with Random, Nothing, Unit] = {
     val remainderWorkload = workload(state, sampleSize % concurrency)
     val workloadCount     = sampleSize / concurrency
-    val workloads         = List.fill(concurrency - 1)(workload(state, workloadCount))
+    val workloads         = List.fill(concurrency)(workload(state, workloadCount))
     ZIO.collectAllPar(remainderWorkload :: workloads).unit
   }
 
   private def workload(state: PiState, size: Int) =
-    (addPoint(state) *> ongoingEstimate(state)).repeat(Schedule.recurs(size)).unit
+    if (size != 0)
+      (addSample(state) *> ongoingEstimate(state)).repeat(Schedule.recurs(size - 1)).unit
+    else ZIO.unit
 
-  private def ongoingEstimate(state: PiState) =
-    for {
-      inside     <- state.inside.get
-      total      <- state.total.get
-      piEstimate = estimatePi(inside, total)
-      _          <- putStrLn(s"Pi estimate: $piEstimate")
-    } yield ()
-
-  private def addPoint(state: PiState): ZIO[Random, Nothing, Unit] =
+  private def addSample(state: PiState): ZIO[Random, Nothing, Unit] =
     for {
       point <- randomPoint
       _     <- state.inside.update(n => if (insideCircle(point._1, point._2)) n + 1 else n)
       _     <- state.total.update(_ + 1)
+    } yield ()
+
+  private def ongoingEstimate(state: PiState) =
+    for {
+      inside <- state.inside.get
+      total  <- state.total.get
+      _      <- putStrLn(s"Pi estimate: ${estimatePi(inside, total)}")
     } yield ()
 
   private def printFinalEstimate(state: PiState, sampleSize: Int) =

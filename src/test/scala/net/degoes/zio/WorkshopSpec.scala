@@ -114,6 +114,17 @@ object WorkshopSpec
           ),
           testAlarmNeverWakesBeforeTime(AlarmAppImproved, maxSleepTime = 3600)
         ),
+        suite("ComputePi")(
+          suite("runSimulation")(
+            testM("prints all estimates") {
+              for {
+                state  <- ComputePi.initState
+                _      <- ComputePi.runSimulation(sampleSize = 1000, concurrency = 12, state)
+                output <- TestConsole.output
+              } yield assert(output.size, equalTo(1000))
+            }
+          )
+        ),
         suite("Board")(
           test("won horizontal first") {
             horizontalFirst(Mark.X) && horizontalFirst(Mark.O)
