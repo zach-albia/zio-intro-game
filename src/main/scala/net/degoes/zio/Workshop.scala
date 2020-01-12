@@ -278,7 +278,11 @@ object CatIncremental extends App {
     final def read: ZIO[Blocking, IOException, Option[Chunk[Byte]]] =
       blockingIO {
         if (is.available() == 0) None
-        else Some(Chunk.fromArray(is.readNBytes(CHUNK_SIZE)))
+        else {
+          val arr = Array.ofDim[Byte](CHUNK_SIZE)
+          val bytesRead = is.read(arr)
+          if (bytesRead == -1) None else Some(Chunk.fromArray(arr))
+        }
       }
   }
 

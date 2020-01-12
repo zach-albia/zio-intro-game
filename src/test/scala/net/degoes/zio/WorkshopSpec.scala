@@ -56,11 +56,10 @@ object WorkshopSpec
                 exitCode           <- PromptName.run(Nil)
                 output             <- TestConsole.output
                 (prompt, greeting) = (output(0), output(1))
-              } yield
-                assert(exitCode, equalTo(0)) &&
-                  assert(prompt.toLowerCase, isNonEmptyString) &&
-                  assert(output.size, equalTo(2)) &&
-                  assert(greeting, equalTo(s"Hello, $name!\n"))
+              } yield assert(exitCode, equalTo(0)) &&
+                assert(prompt.toLowerCase, isNonEmptyString) &&
+                assert(output.size, equalTo(2)) &&
+                assert(greeting, equalTo(s"Hello, $name!\n"))
           }
         },
         suite("NumberGuesser")(
@@ -73,10 +72,9 @@ object WorkshopSpec
                 exitCode <- NumberGuesser.run(Nil)
                 output   <- TestConsole.output
                 response = output(1)
-              } yield
-                assert(exitCode, equalTo(0)) &&
-                  assert(output.size, equalTo(2)) &&
-                  assert(response, equalTo("You guessed correctly!\n"))
+              } yield assert(exitCode, equalTo(0)) &&
+                assert(output.size, equalTo(2)) &&
+                assert(response, equalTo("You guessed correctly!\n"))
             }
           },
           testM("incorrect guess reveals number") {
@@ -93,10 +91,9 @@ object WorkshopSpec
                   _        <- TestConsole.feedLines(guess.toString)
                   exitCode <- NumberGuesser.run(Nil)
                   output   <- TestConsole.output
-                  tokens   = output(1).split(" ").map(_.strip).toList
-                } yield
-                  assert(exitCode, equalTo(0)) &&
-                    assert(tokens, contains(num.toString))
+                  tokens   = output(1).split(" ").map(_.trim).toList
+                } yield assert(exitCode, equalTo(0)) &&
+                  assert(tokens, contains(num.toString))
             }
           }
         ),
@@ -171,11 +168,11 @@ object CommonSpecs {
               exitCode  <- cat.run(List(absPath.toString))
               output    <- TestConsole.output
               exists    <- Files.deleteIfExists(tempFile)
-              linesRead = output.mkString.split("\\s+").toVector.filter(_.nonEmpty)
-            } yield
-              assert(exitCode, equalTo(0)) &&
-                assert(linesRead, equalTo(contentsWrittenToFile)) &&
-                assert(exists, isTrue)
+              linesRead = output.mkString("\n").trim()
+              expected  = contentsWrittenToFile.mkString("\n")
+            } yield assert(exitCode, equalTo(0)) &&
+              assert(expected, equalTo(linesRead)) &&
+              assert(exists, isTrue)
         }
       },
       testM("prints usage when no path given") {
@@ -205,9 +202,11 @@ object CommonSpecs {
       } @@ TestAspect.flaky // On the off-chance files get messed up
     )
 
-  def alarmTest(alarmApp: zio.App,
-                maxSleepTime: Int,
-                expectedOutputSize: (Vector[String], Int) => Int) =
+  def alarmTest(
+      alarmApp: zio.App,
+      maxSleepTime: Int,
+      expectedOutputSize: (Vector[String], Int) => Int
+  ) =
     testM("Retries until good input given then wakes up") {
       val tries = for {
         badInputs <- Gen.listOf(Gen.alphaNumericString.filter(_.forall(!_.isDigit)))
@@ -224,16 +223,16 @@ object CommonSpecs {
               exitCode <- alarmApp.run(Nil)
               output   <- TestConsole.output
               expected = expectedOutputSize(tries, duration)
-            } yield
-              assert(exitCode, equalTo(0)) && // program always succeeds because of retry logic
-                assert(output.size, equalTo(expected)) // lines printed to console = prompts + 1 wake message
+            } yield assert(exitCode, equalTo(0)) &&  // program always succeeds because of retry logic
+              assert(output.size, equalTo(expected)) // lines printed to console = prompts + 1 wake message
           }
       }
     }
 
   def testAlarmNeverWakesBeforeTime(
       app: zio.App,
-      maxSleepTime: Int): ZSpec[zio.ZEnv with TestConsole, Nothing, String, Unit] = {
+      maxSleepTime: Int
+  ): ZSpec[zio.ZEnv with TestConsole, Nothing, String, Unit] = {
     testM("Never wakes up before alarm goes off") {
       val times = for {
         sleepTime   <- Gen.int(1, maxSleepTime)
