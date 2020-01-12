@@ -223,8 +223,8 @@ object CommonSpecs {
               exitCode <- alarmApp.run(Nil)
               output   <- TestConsole.output
               expected = expectedOutputSize(tries, duration)
-            } yield assert(exitCode, equalTo(0)) &&  // program always succeeds because of retry logic
-              assert(output.size, equalTo(expected)) // lines printed to console = prompts + 1 wake message
+            } yield assert(exitCode, equalTo(0)) &&  // always succeeds because of retry logic
+              assert(output.size, equalTo(expected)) // lines printed = prompts + 1 wake message
           }
       }
     }
@@ -280,12 +280,12 @@ object PropertyHelpers {
         env      <- ZIO.environment[zio.ZEnv with TestConsole].toManaged_
         newClock <- TestClock.make(TestClock.DefaultData)
         testEnv = new WorkshopTestEnvironment {
-          override val console: TestConsole.Service[Any] = env.console
-          override val blocking: Blocking.Service[Any]   = env.blocking
-          override val random: Random.Service[Any]       = env.random
-          override val system: System.Service[Any]       = env.system
-          override val clock: TestClock.Service[Any]     = newClock.clock
-          override val scheduler: TestClock.Service[Any] = newClock.scheduler
+          val console   = env.console
+          val blocking  = env.blocking
+          val random    = env.random
+          val system    = env.system
+          val clock     = newClock.clock
+          val scheduler = newClock.scheduler
         }
       } yield testEnv
     }
