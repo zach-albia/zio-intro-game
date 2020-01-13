@@ -119,6 +119,14 @@ object WorkshopSpec
                 _      <- ComputePi.runSimulation(sampleSize = 1000, concurrency = 12, state)
                 output <- TestConsole.output
               } yield assert(output.size, equalTo(1000))
+            },
+            testM("inside <= total") {
+              for {
+                state  <- ComputePi.initState
+                _      <- ComputePi.runSimulation(sampleSize = 1000, concurrency = 12, state)
+                inside <- state.inside.get
+                total  <- state.total.get
+              } yield assert(inside, isLessThanEqualTo(total))
             }
           )
         ),

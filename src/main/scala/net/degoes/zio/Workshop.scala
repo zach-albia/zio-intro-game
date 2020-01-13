@@ -402,7 +402,7 @@ object ComputePi extends App {
   def run(args: List[String]): ZIO[ZEnv, Nothing, Int] =
     (for {
       sampleSize  <- readSampleSize(args)
-      concurrency = getRuntime.availableProcessors // unsafe, i know. too lazy :/
+      concurrency <- ZIO.effectTotal(getRuntime.availableProcessors)
       state       <- initState
       _           <- runSimulation(sampleSize, concurrency, state)
       _           <- printFinalEstimate(state, sampleSize)
