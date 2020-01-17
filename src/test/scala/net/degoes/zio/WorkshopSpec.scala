@@ -168,7 +168,7 @@ object WorkshopSpec
           )
         ),
         suite("StmSwap")(
-          suite("is non-deterministic")(
+          suite("exampleRef is non-deterministic")(
             testM("can be 0") {
               assertM(StmSwap.exampleRef, equalTo(0))
             } @@ TestAspect.flaky,
@@ -178,7 +178,10 @@ object WorkshopSpec
             testM("can be 200") {
               assertM(StmSwap.exampleRef, equalTo(200))
             } @@ TestAspect.flaky
-          )
+          ),
+          testM("exampleStm is deterministic") {
+            assertM(StmSwap.exampleStm, equalTo(100))
+          } @@ TestAspect.nonFlaky
         ),
         suite("Board")(
           test("won horizontal first") {
