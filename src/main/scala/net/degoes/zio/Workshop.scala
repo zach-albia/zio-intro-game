@@ -430,11 +430,12 @@ object ComputePi extends App {
 
   def runSimulation(sampleSize: Int,
                     concurrency: Int,
-                    state: PiState): ZIO[Console with Random, Nothing, Unit] = {
+                    state: PiState) = {
     val remainderWorkload = workload(state, sampleSize % concurrency)
     val workloadCount     = sampleSize / concurrency
     val workloads         = List.fill(concurrency)(workload(state, workloadCount))
-    ZIO.collectAllPar(remainderWorkload :: workloads).unit
+    ZIO.foreachParN_(concurrency)(remainderWorkload :: workloads)(identity) *>
+      ZIO.succeed(state)
   }
 
   private def workload(state: PiState, size: Int) =
@@ -450,11 +451,13 @@ object ComputePi extends App {
     } yield ()
 
   private def ongoingEstimate(state: PiState) =
+    currentEstimate(state).flatMap(pi => putStrLn(s"Pi estimate: $pi"))
+
+  def currentEstimate(state: PiState): UIO[Double] =
     for {
       inside <- state.inside.get
       total  <- state.total.get
-      _      <- putStrLn(s"Pi estimate: ${estimatePi(inside, total)}")
-    } yield ()
+    } yield estimatePi(inside, total)
 
   private def printFinalEstimate(state: PiState, sampleSize: Int) =
     for {

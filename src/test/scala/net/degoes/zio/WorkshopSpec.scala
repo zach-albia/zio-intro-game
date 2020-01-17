@@ -1,6 +1,6 @@
 package net.degoes.zio
 
-import zio.ZIO
+import zio.{Ref, Schedule, ZIO}
 import zio.blocking.Blocking
 import zio.clock.Clock
 import zio.console.Console
@@ -117,12 +117,53 @@ object WorkshopSpec
         suite("ComputePi")(
           suite("runSimulation")(
             testM("inside <= total") {
+              checkM(Gen.int(0, 10000)) { sampleSize =>
+                for {
+                  state       <- ComputePi.initState
+                  concurrency <- ZIO.effectTotal(java.lang.Runtime.getRuntime.availableProcessors)
+                  _           <- ComputePi.runSimulation(sampleSize, concurrency, state)
+                  inside      <- state.inside.get
+                  total       <- state.total.get
+                } yield assert(inside, isLessThanEqualTo(total))
+              }
+            },
+            testM("estimates get better with more samples") {
+              val fewerSamples = 100
+              val moreSamples = 1000
+              val timesToTry  = 1000
+
+              import ComputePi._
+              import java.lang.Runtime.getRuntime
+
+              def runSample =
+                for {
+                  fewerSamplesState <- initState
+                  concurrency      <- ZIO.effectTotal(getRuntime.availableProcessors)
+                  _                <- runSimulation(fewerSamples, concurrency, fewerSamplesState)
+                  moreSamplesState <- initState
+                  _                <- runSimulation(moreSamples, concurrency, moreSamplesState)
+                  fewerSamplesPi    <- currentEstimate(fewerSamplesState)
+                  moreSamplesPi    <- currentEstimate(moreSamplesState)
+                } yield (fewerSamplesPi, moreSamplesPi)
+
+              def checkWinners(moreWins: Ref[Long], lessWins: Ref[Long]) =
+                for {
+                  estimates    <- runSample
+                  (fewerPi, morePi) = estimates
+                  _ <- if (math.abs(math.Pi - morePi) <= math.abs(math.Pi - fewerPi))
+                        moreWins.update(_ + 1)
+                      else
+                        lessWins.update(_ + 1)
+                } yield ()
+
               for {
-                state  <- ComputePi.initState
-                _      <- ComputePi.runSimulation(sampleSize = 1000, concurrency = 12, state)
-                inside <- state.inside.get
-                total  <- state.total.get
-              } yield assert(inside, isLessThanEqualTo(total))
+                moreWinCount <- Ref.make(0L)
+                lessWinCount <- Ref.make(0L)
+                _ <- checkWinners(moreWinCount, lessWinCount).repeat(
+                      Schedule.recurs(timesToTry - 1))
+                moreWins <- moreWinCount.get
+                lessWins <- lessWinCount.get
+              } yield assert(moreWins, isGreaterThan(lessWins))
             }
           )
         ),
