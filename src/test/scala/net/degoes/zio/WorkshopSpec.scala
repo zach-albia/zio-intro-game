@@ -56,10 +56,11 @@ object WorkshopSpec
                 exitCode           <- PromptName.run(Nil)
                 output             <- TestConsole.output
                 (prompt, greeting) = (output(0), output(1))
-              } yield assert(exitCode, equalTo(0)) &&
-                assert(prompt.toLowerCase, isNonEmptyString) &&
-                assert(output.size, equalTo(2)) &&
-                assert(greeting, equalTo(s"Hello, $name!\n"))
+              } yield
+                assert(exitCode, equalTo(0)) &&
+                  assert(prompt.toLowerCase, isNonEmptyString) &&
+                  assert(output.size, equalTo(2)) &&
+                  assert(greeting, equalTo(s"Hello, $name!\n"))
           }
         },
         suite("NumberGuesser")(
@@ -72,9 +73,10 @@ object WorkshopSpec
                 exitCode <- NumberGuesser.run(Nil)
                 output   <- TestConsole.output
                 response = output(1)
-              } yield assert(exitCode, equalTo(0)) &&
-                assert(output.size, equalTo(2)) &&
-                assert(response, equalTo("You guessed correctly!\n"))
+              } yield
+                assert(exitCode, equalTo(0)) &&
+                  assert(output.size, equalTo(2)) &&
+                  assert(response, equalTo("You guessed correctly!\n"))
             }
           },
           testM("incorrect guess reveals number") {
@@ -92,8 +94,9 @@ object WorkshopSpec
                   exitCode <- NumberGuesser.run(Nil)
                   output   <- TestConsole.output
                   tokens   = output(1).split(" ").map(_.trim).toList
-                } yield assert(exitCode, equalTo(0)) &&
-                  assert(tokens, contains(num.toString))
+                } yield
+                  assert(exitCode, equalTo(0)) &&
+                    assert(tokens, contains(num.toString))
             }
           }
         ),
@@ -128,6 +131,19 @@ object WorkshopSpec
                 total  <- state.total.get
               } yield assert(inside, isLessThanEqualTo(total))
             }
+          )
+        ),
+        suite("StmSwap")(
+          suite("is non-deterministic")(
+            testM("can be 0") {
+              assertM(StmSwap.exampleRef, equalTo(0))
+            } @@ TestAspect.flaky,
+            testM("can be 100") {
+              assertM(StmSwap.exampleRef, equalTo(100))
+            } @@ TestAspect.flaky,
+            testM("can be 200") {
+              assertM(StmSwap.exampleRef, equalTo(200))
+            } @@ TestAspect.flaky
           )
         ),
         suite("Board")(
@@ -176,11 +192,11 @@ object CommonSpecs {
               exitCode  <- cat.run(List(absPath.toString))
               output    <- TestConsole.output
               exists    <- Files.deleteIfExists(tempFile)
-              linesRead = output.mkString("\n").trim()
-              expected  = contentsWrittenToFile.mkString("\n")
-            } yield assert(exitCode, equalTo(0)) &&
-              assert(expected, equalTo(linesRead)) &&
-              assert(exists, isTrue)
+              linesRead = output.mkString.split("\\s+").toVector.map(_.trim).filter(_.nonEmpty)
+            } yield
+              assert(exitCode, equalTo(0)) &&
+                assert(linesRead, equalTo(contentsWrittenToFile)) &&
+                assert(exists, isTrue)
         }
       },
       testM("prints usage when no path given") {
@@ -231,8 +247,9 @@ object CommonSpecs {
               exitCode <- alarmApp.run(Nil)
               output   <- TestConsole.output
               expected = expectedOutputSize(tries, duration)
-            } yield assert(exitCode, equalTo(0)) &&  // always succeeds because of retry logic
-              assert(output.size, equalTo(expected)) // lines printed = prompts + 1 wake message
+            } yield
+              assert(exitCode, equalTo(0)) && // always succeeds because of retry logic
+                assert(output.size, equalTo(expected)) // lines printed = prompts + 1 wake message
           }
       }
     }
