@@ -365,6 +365,8 @@ object AlarmAppImproved extends App {
 
 object ComputePi extends App {
   import zio.random._
+  import zio.clock._
+  import zio.duration._
   import zio.console._
   import java.lang.Runtime.getRuntime
 
@@ -407,7 +409,9 @@ object ComputePi extends App {
       sampleSize  <- readSampleSize(args)
       concurrency <- ZIO.effectTotal(getRuntime.availableProcessors)
       state       <- initState
+      estimate    <- (sleep(1.second) *> ongoingEstimate(state)).forever.fork
       _           <- runSimulation(sampleSize, concurrency, state)
+      _           <- estimate.interrupt
       _           <- printFinalEstimate(state, sampleSize)
     } yield ())
       .foldM(e => putStrLn(e.getMessage) as 1, _ => ZIO.succeed(0))
@@ -435,7 +439,7 @@ object ComputePi extends App {
 
   private def workload(state: PiState, size: Int) =
     if (size != 0)
-      (addSample(state) *> ongoingEstimate(state)).repeat(Schedule.recurs(size - 1)).unit
+      addSample(state).repeat(Schedule.recurs(size - 1)).unit
     else ZIO.unit
 
   private def addSample(state: PiState): ZIO[Random, Nothing, Unit] =
