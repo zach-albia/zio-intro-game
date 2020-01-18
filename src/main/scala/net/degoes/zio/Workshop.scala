@@ -562,6 +562,7 @@ object StmLock extends App {
     } yield 0
 }
 
+// not sure if these exercises are finished
 object StmLunchTime extends App {
   import zio.console._
   import zio.stm._
@@ -574,9 +575,12 @@ object StmLunchTime extends App {
   final case class Attendee(state: TRef[Attendee.State]) {
     import Attendee.State._
 
-    def isStarving: STM[Nothing, Boolean] = ???
+    def isStarving: STM[Nothing, Boolean] = state.get.map {
+      case Starving => true
+      case Full     => false
+    }
 
-    def feed: STM[Nothing, Unit] = ???
+    def feed: STM[Nothing, Unit] = state.set(Full)
   }
   object Attendee {
     sealed trait State
@@ -601,9 +605,11 @@ object StmLunchTime extends App {
         }
         .map(_._2)
 
-    def takeSeat(index: Int): STM[Nothing, Unit] = ???
+    def takeSeat(index: Int): STM[Nothing, Unit] =
+      seats.update(index, _ => true).unit
 
-    def vacateSeat(index: Int): STM[Nothing, Unit] = ???
+    def vacateSeat(index: Int): STM[Nothing, Unit] =
+      seats.update(index, _ => false).unit
   }
 
   /**
@@ -623,7 +629,18 @@ object StmLunchTime extends App {
     * Using STM, implement a method that feeds only the starving attendees.
     */
   def feedStarving(table: Table, list: List[Attendee]): UIO[Unit] =
-    ???
+    STM
+      .collectAll(list.map(_.isStarving))
+      .map { bs =>
+        STM.collectAll((bs zip list).map {
+          case (isStarving, attendee) =>
+            if (isStarving) feedAttendee(table, attendee)
+            else STM.unit
+        })
+      }
+      .flatten
+      .unit
+      .commit
 
   def run(args: List[String]): ZIO[ZEnv, Nothing, Int] = {
     val Attendees = 100
@@ -631,7 +648,7 @@ object StmLunchTime extends App {
 
     for {
       attendees <- ZIO.foreach(0 to Attendees)(
-                    i =>
+                    _ =>
                       TRef
                         .make[Attendee.State](Attendee.State.Starving)
                         .map(Attendee(_))
@@ -639,7 +656,7 @@ object StmLunchTime extends App {
                   )
       table <- TArray
                 .fromIterable(List.fill(TableSize)(false))
-                .map(Table(_))
+                .map(Table)
                 .commit
       _ <- feedStarving(table, attendees)
     } yield 0

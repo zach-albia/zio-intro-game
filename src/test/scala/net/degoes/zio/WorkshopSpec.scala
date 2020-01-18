@@ -185,7 +185,7 @@ object WorkshopSpec
           } @@ TestAspect.nonFlaky
         ),
         suite("StmLock")(
-          testM("prints 11 of the same message and 11 of another") {
+          testM("prints 11 of 1 message and then 11 of another") {
             for {
               _                       <- clearConsole
               exitCode                <- StmLock.run(Nil)
