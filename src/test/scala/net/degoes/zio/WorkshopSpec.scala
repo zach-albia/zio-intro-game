@@ -184,6 +184,20 @@ object WorkshopSpec
             assertM(StmSwap.exampleStm, equalTo(100))
           } @@ TestAspect.nonFlaky
         ),
+        suite("StmLock")(
+          testM("prints 11 of the same message and 11 of another") {
+            for {
+              _                       <- clearConsole
+              exitCode                <- StmLock.run(Nil)
+              output                  <- TestConsole.output
+              (firstHalf, secondHalf) = output.splitAt(11)
+            } yield
+              assert(exitCode, equalTo(0)) &&
+                firstHalf.map(a => assert(a, equalTo(firstHalf.head))).reduce(_ && _) &&
+                secondHalf.map(a => assert(a, equalTo(secondHalf.head))).reduce(_ && _) &&
+                assert(firstHalf.head, not(equalTo(secondHalf.head)))
+          } @@ TestAspect.nonFlaky
+        ),
         suite("Board")(
           test("won horizontal first") {
             horizontalFirst(Mark.X) && horizontalFirst(Mark.O)

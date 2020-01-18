@@ -548,7 +548,7 @@ object StmLock extends App {
   }
 
   def run(args: List[String]): ZIO[ZEnv, Nothing, Int] =
-    (for {
+    for {
       lock <- Lock.make
       fiber1 <- lock.acquire
                  .bracket_(lock.release)(
@@ -559,7 +559,7 @@ object StmLock extends App {
                    putStrLn("Sarah: I have the lock!").repeat(Schedule.recurs(10)))
                  .fork
       _ <- (fiber1 zip fiber2).join
-    } yield 0) as 1
+    } yield 0
 }
 
 object StmLunchTime extends App {
