@@ -127,43 +127,44 @@ object WorkshopSpec
                 } yield assert(inside, isLessThanEqualTo(total))
               }
             },
-            testM("estimates get better with more samples") {
-              val fewerSamples = 100
-              val moreSamples = 1000
-              val timesToTry  = 1000
+            testM("estimates tend to get better with more samples") {
+              checkM(Gen.int(1, 100) <*> Gen.int(500, 1000)) {
+                case (fewerSamples, moreSamples) =>
+                  val timesToTry = 30
 
-              import ComputePi._
-              import java.lang.Runtime.getRuntime
+                  import ComputePi._
+                  import java.lang.Runtime.getRuntime
 
-              def runSample =
-                for {
-                  fewerSamplesState <- initState
-                  concurrency      <- ZIO.effectTotal(getRuntime.availableProcessors)
-                  _                <- runSimulation(fewerSamples, concurrency, fewerSamplesState)
-                  moreSamplesState <- initState
-                  _                <- runSimulation(moreSamples, concurrency, moreSamplesState)
-                  fewerSamplesPi    <- currentEstimate(fewerSamplesState)
-                  moreSamplesPi    <- currentEstimate(moreSamplesState)
-                } yield (fewerSamplesPi, moreSamplesPi)
+                  def runSample =
+                    for {
+                      fewerSamplesState <- initState
+                      concurrency       <- ZIO.effectTotal(getRuntime.availableProcessors)
+                      _                 <- runSimulation(fewerSamples, concurrency, fewerSamplesState)
+                      moreSamplesState  <- initState
+                      _                 <- runSimulation(moreSamples, concurrency, moreSamplesState)
+                      fewerSamplesPi    <- currentEstimate(fewerSamplesState)
+                      moreSamplesPi     <- currentEstimate(moreSamplesState)
+                    } yield (fewerSamplesPi, moreSamplesPi)
 
-              def checkWinners(moreWins: Ref[Long], lessWins: Ref[Long]) =
-                for {
-                  estimates    <- runSample
-                  (fewerPi, morePi) = estimates
-                  _ <- if (math.abs(math.Pi - morePi) <= math.abs(math.Pi - fewerPi))
-                        moreWins.update(_ + 1)
-                      else
-                        lessWins.update(_ + 1)
-                } yield ()
+                  def checkWinners(moreWins: Ref[Long], lessWins: Ref[Long]) =
+                    for {
+                      estimates         <- runSample
+                      (fewerPi, morePi) = estimates
+                      _ <- if (math.abs(math.Pi - morePi) <= math.abs(math.Pi - fewerPi))
+                            moreWins.update(_ + 1)
+                          else
+                            lessWins.update(_ + 1)
+                    } yield ()
 
-              for {
-                moreWinCount <- Ref.make(0L)
-                lessWinCount <- Ref.make(0L)
-                _ <- checkWinners(moreWinCount, lessWinCount).repeat(
-                      Schedule.recurs(timesToTry - 1))
-                moreWins <- moreWinCount.get
-                lessWins <- lessWinCount.get
-              } yield assert(moreWins, isGreaterThan(lessWins))
+                  for {
+                    moreWinCount <- Ref.make(0L)
+                    lessWinCount <- Ref.make(0L)
+                    _ <- checkWinners(moreWinCount, lessWinCount).repeat(
+                          Schedule.recurs(timesToTry - 1))
+                    moreWins <- moreWinCount.get
+                    lessWins <- lessWinCount.get
+                  } yield assert(moreWins, isGreaterThan(lessWins))
+              }
             }
           )
         ),
