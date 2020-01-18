@@ -428,9 +428,7 @@ object ComputePi extends App {
       total  <- Ref.make(0L)
     } yield PiState(inside, total)
 
-  def runSimulation(sampleSize: Int,
-                    concurrency: Int,
-                    state: PiState) = {
+  def runSimulation(sampleSize: Int, concurrency: Int, state: PiState) = {
     val remainderWorkload = workload(state, sampleSize % concurrency)
     val workloadCount     = sampleSize / concurrency
     val workloads         = List.fill(concurrency)(workload(state, workloadCount))
@@ -537,23 +535,28 @@ object StmLock extends App {
     * acquisition, and release methods.
     */
   class Lock private (tref: TRef[Boolean]) {
-    def acquire: UIO[Unit] = ???
-    def release: UIO[Unit] = ???
+    def acquire: UIO[Unit] =
+      (for {
+        available <- tref.get
+        _         <- if (available) tref.set(false) else STM.retry
+      } yield ()).commit
+
+    def release: UIO[Unit] = tref.set(true).commit
   }
   object Lock {
-    def make: UIO[Lock] = ???
+    def make: UIO[Lock] = TRef.makeCommit(true).map(new Lock(_))
   }
 
   def run(args: List[String]): ZIO[ZEnv, Nothing, Int] =
     (for {
       lock <- Lock.make
       fiber1 <- lock.acquire
-                 .bracket_(lock.release)(putStrLn("Bob  : I have the lock!"))
-                 .repeat(Schedule.recurs(10))
+                 .bracket_(lock.release)(
+                   putStrLn("Bob  : I have the lock!").repeat(Schedule.recurs(10)))
                  .fork
       fiber2 <- lock.acquire
-                 .bracket_(lock.release)(putStrLn("Sarah: I have the lock!"))
-                 .repeat(Schedule.recurs(10))
+                 .bracket_(lock.release)(
+                   putStrLn("Sarah: I have the lock!").repeat(Schedule.recurs(10)))
                  .fork
       _ <- (fiber1 zip fiber2).join
     } yield 0) as 1
