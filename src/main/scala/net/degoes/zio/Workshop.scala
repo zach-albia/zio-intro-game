@@ -675,15 +675,48 @@ object StmPriorityQueue extends App {
     * to have higher priority than higher integers.
     */
   class PriorityQueue[A] private (
-      minLevel: TRef[Int],
+      minLevel: TRef[Option[Int]],
       map: TMap[Int, TQueue[A]]
   ) {
-    def offer(a: A, priority: Int): STM[Nothing, Unit] = ???
+    def offer(a: A, priority: Int): STM[Nothing, Unit] =
+      for {
+        queueOpt <- map.get(priority)
+        queue <- queueOpt.fold(
+                  for {
+                    queue <- TQueue.make[A](1)
+                    _     <- map.put(priority, queue)
+                  } yield queue
+                )(STM.succeed)
+        _ <- queue.offer(a)
+        _ <- minLevel.update(_.map(math.min(priority, _)).orElse(Some(priority)))
+      } yield ()
 
-    def take: STM[Nothing, A] = ???
+    def take: STM[Nothing, A] =
+      for {
+        minOpt   <- minLevel.get
+        min      <- minOpt.fold[STM[Nothing, Int]](STM.retry)(STM.succeed)
+        queueOpt <- map.get(min)
+        a <- queueOpt.fold[STM[Nothing, A]](STM.retry)(queue => {
+              for {
+                a         <- queue.take
+                queueSize <- queue.size
+                _         <- map.removeIf((i, _) => i == min && queueSize == 0)
+                mapSize   <- map.keys.map(_.size)
+                newMin <- if (mapSize == 0) STM.succeed(None)
+                         else if (queueSize == 0) {
+                           map.keys.map(keys => Some(keys.min))
+                         } else STM.succeed(Some(min))
+                _ <- minLevel.set(newMin)
+              } yield a
+            })
+      } yield a
   }
   object PriorityQueue {
-    def make[A]: STM[Nothing, PriorityQueue[A]] = ???
+    def make[A]: STM[Nothing, PriorityQueue[A]] =
+      for {
+        min <- TRef.make(Option.empty[Int])
+        map <- TMap.empty[Int, TQueue[A]]
+      } yield new PriorityQueue[A](min, map)
   }
 
   def run(args: List[String]): ZIO[ZEnv, Nothing, Int] =
@@ -701,7 +734,7 @@ object StmPriorityQueue extends App {
           .commit
       }
       _ <- ZIO.forkAll(List(lowPriority, highPriority)) *> queue.take.commit
-            .flatMap(putStrLn(_))
+            .flatMap(putStrLn)
             .forever
             .fork *>
             getStrLn
