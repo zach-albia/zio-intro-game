@@ -748,18 +748,18 @@ object StmReentrantLock extends App {
   private final case class WriteLock(
       writeCount: Int,
       readCount: Int,
-      fiberId: FiberId
+      fiberId: Fiber.Id
   )
   private final class ReadLock private (readers: Map[Fiber.Id, Int]) {
     def total: Int = readers.values.sum
 
-    def noOtherHolder(fiberId: FiberId): Boolean =
-      readers.size == 0 || (readers.size == 1 && readers.contains(fiberId))
+    def noOtherHolder(fiberId: Fiber.Id): Boolean =
+      readers.isEmpty || (readers.size == 1 && readers.contains(fiberId))
 
-    def readLocks(fiberId: FiberId): Int =
+    def readLocks(fiberId: Fiber.Id): Int =
       readers.get(fiberId).fold(0)(identity)
 
-    def adjust(fiberId: FiberId, adjust: Int): ReadLock = {
+    def adjust(fiberId: Fiber.Id, adjust: Int): ReadLock = {
       val total = readLocks(fiberId)
 
       val newTotal = total + adjust
