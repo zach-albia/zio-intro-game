@@ -675,46 +675,47 @@ object StmPriorityQueue extends App {
     * to have higher priority than higher integers.
     */
   class PriorityQueue[A] private (
-      minLevel: TRef[Option[Int]],
+      minLevel: TRef[Int],
       map: TMap[Int, TQueue[A]]
   ) {
     def offer(a: A, priority: Int): STM[Nothing, Unit] =
       for {
-        queueOpt <- map.get(priority)
-        queue <- queueOpt.fold(
-                  for {
-                    queue <- TQueue.make[A](1)
-                    _     <- map.put(priority, queue)
-                  } yield queue
-                )(STM.succeed)
+        queue <- map
+                  .get(priority)
+                  .flatMap(
+                    _.fold(
+                      for {
+                        queue <- TQueue.make[A](1)
+                        _     <- map.put(priority, queue)
+                      } yield queue
+                    )(STM.succeed))
         _ <- queue.offer(a)
-        _ <- minLevel.update(_.map(math.min(priority, _)).orElse(Some(priority)))
+        _ <- minLevel.update(math.min(priority, _))
       } yield ()
 
     def take: STM[Nothing, A] =
       for {
-        minOpt   <- minLevel.get
-        min      <- minOpt.fold[STM[Nothing, Int]](STM.retry)(STM.succeed)
-        queueOpt <- map.get(min)
-        a <- queueOpt.fold[STM[Nothing, A]](STM.retry)(queue => {
-              for {
-                a         <- queue.take
-                queueSize <- queue.size
-                _         <- map.removeIf((i, _) => i == min && queueSize == 0)
-                mapSize   <- map.keys.map(_.size)
-                newMin <- if (mapSize == 0) STM.succeed(None)
-                         else if (queueSize == 0) {
-                           map.keys.map(keys => Some(keys.min))
-                         } else STM.succeed(Some(min))
-                _ <- minLevel.set(newMin)
-              } yield a
-            })
+        min <- minLevel.get
+        a <- map
+              .get(min)
+              .flatMap(_.fold[STM[Nothing, A]](STM.retry)(queue => {
+                for {
+                  a         <- queue.take
+                  queueSize <- queue.size
+                  _         <- map.removeIf((i, _) => i == min && queueSize == 0)
+                  mapSize   <- map.keys.map(_.size)
+                  newMin <- if (mapSize == 0) STM.succeed(Int.MaxValue)
+                           else if (queueSize == 0) map.keys.map(_.min)
+                           else STM.succeed(min)
+                  _ <- minLevel.set(newMin)
+                } yield a
+              }))
       } yield a
   }
   object PriorityQueue {
     def make[A]: STM[Nothing, PriorityQueue[A]] =
       for {
-        min <- TRef.make(Option.empty[Int])
+        min <- TRef.make(Int.MaxValue)
         map <- TMap.empty[Int, TQueue[A]]
       } yield new PriorityQueue[A](min, map)
   }
