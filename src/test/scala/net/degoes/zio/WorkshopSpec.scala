@@ -200,6 +200,12 @@ object WorkshopSpec
                 assert(firstHalf.head, not(equalTo(secondHalf.head)))
           } @@ TestAspect.nonFlaky
         ),
+        suite("StmLunchTime")(
+          // TODO: How to write tests here? Not even sure how it should work.
+        ),
+        suite("StmPriorityQueue")(
+          // TODO: Write tests as soon as zio-test has stateful testing
+        ),
         suite("Board")(
           test("won horizontal first") {
             horizontalFirst(Mark.X) && horizontalFirst(Mark.O)
