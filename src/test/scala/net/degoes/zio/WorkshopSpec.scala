@@ -1,5 +1,7 @@
 package net.degoes.zio
 
+import java.lang.{System => JSystem}
+
 import zio.{Ref, Schedule, ZIO}
 import zio.blocking.Blocking
 import zio.clock.Clock
@@ -230,6 +232,8 @@ object WorkshopSpec
 object CommonSpecs {
   import PropertyHelpers._
 
+  val lineSep: String = JSystem.lineSeparator
+
   def catSuite(cat: zio.App, label: String) =
     suite(label)(
       testM("prints string read from file") {
@@ -244,10 +248,14 @@ object CommonSpecs {
               exitCode  <- cat.run(List(absPath.toString))
               output    <- TestConsole.output
               exists    <- Files.deleteIfExists(tempFile)
-              linesRead = output.mkString.split("\\s+").toVector.map(_.trim).filter(_.nonEmpty)
+              expected  = contentsWrittenToFile.map(_ + lineSep)
+              outputVec = output.mkString.split(s"(?<=$lineSep)").toVector
+              actual = outputVec.lastOption
+                .fold(outputVec)(last => if (last == "\n") outputVec.dropRight(1) else outputVec)
+                .filter(_.nonEmpty)
             } yield
               assert(exitCode, equalTo(0)) &&
-                assert(linesRead, equalTo(contentsWrittenToFile)) &&
+                assert(expected, equalTo(actual)) &&
                 assert(exists, isTrue)
         }
       },
